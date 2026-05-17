@@ -6,11 +6,10 @@ from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
 from typing import assert_never
 
-import windows11toast
 from loguru import logger
 from packaging.version import Version
 
-from PySide6.QtCore import QThread, QTimer
+from PySide6.QtCore import Qt, QThread, QTimer
 from PySide6.QtWidgets import QApplication
 from qfluentwidgets import (
     FluentTranslator,
@@ -26,7 +25,6 @@ from EasiAuto.core.runtime import ArgvIpcServer, check_singleton, init_exception
 from EasiAuto.core.utils import (
     Point,
     calc_relative_login_window_position,
-    get_resource,
     get_screen_size,
     get_screen_size_physical,
     init_exit_signal_handlers,
@@ -36,6 +34,7 @@ from EasiAuto.core.utils import (
 from EasiAuto.models.config import DownloadSource, UpdateMode, config
 from EasiAuto.models.profile import profile
 from EasiAuto.services.announcement_service import announcement_service
+from EasiAuto.services.toast_service import ToastNotifier
 from EasiAuto.services.update_service import UpdateError, cleanup_update_cache, update_checker
 from EasiAuto.view.components import (
     DialogResponse,
@@ -81,12 +80,9 @@ class PostLoginUpdateThread(QThread):
                     file = update_checker.download_update(decision.downloads[0], allow_latency_check=True)
                     update_checker.apply_script(file, reopen=False)
                 else:
-                    windows11toast.notify(
-                        title="更新可用",
-                        body=f"新版本：{decision.target_version}\n打开应用查看详细信息",
-                        icon_placement=windows11toast.IconPlacement.APP_LOGO_OVERRIDE,
-                        icon_hint_crop=windows11toast.IconCrop.NONE,
-                        icon_src=get_resource("icons/EasiAuto.ico"),
+                    ToastNotifier().show(
+                        "更新可用",
+                        f"新版本：{decision.target_version}",
                     )
         except UpdateError as e:
             logger.warning(f"检查更新时发生异常, 已跳过: {e}")
@@ -118,6 +114,7 @@ class Launcher:
         if self.main_window is None:
             self.main_window = MainWindow()
             self.main_window.runAutomation.connect(self._handle_login_request_from_ui)
+        self.main_window.setWindowState(self.main_window.windowState() & ~Qt.WindowState.WindowMinimized)
         self.main_window.show()
         self.main_window.raise_()
         self.main_window.activateWindow()
@@ -171,12 +168,9 @@ class Launcher:
         # 发送失败通知
         if error_message:
             logger.error(f"自动登录失败: {error_message}")
-            windows11toast.notify(
-                title="自动登录失败",
-                body=f"{error_message}\n检查日志以获取详细信息",
-                icon_placement=windows11toast.IconPlacement.APP_LOGO_OVERRIDE,
-                icon_hint_crop=windows11toast.IconCrop.NONE,
-                icon_src=get_resource("icons/EasiAuto.ico"),
+            ToastNotifier().show(
+                "自动登录失败",
+                f"{error_message}\n检查日志以获取详细信息",
             )
 
         self._post_login_overlay_done = self.status_overlay is None
@@ -445,12 +439,9 @@ class Launcher:
 
         if last_version < Version(__version__):
             cleanup_update_cache()
-            windows11toast.notify(
-                title=f"已更新至 {__version__}",
-                body=f"{config.Update.LastVersion} -> {__version__}",
-                icon_placement=windows11toast.IconPlacement.APP_LOGO_OVERRIDE,
-                icon_hint_crop=windows11toast.IconCrop.NONE,
-                icon_src=get_resource("icons/EasiAuto.ico"),
+            ToastNotifier().show(
+                f"已更新至 {__version__}",
+                f"{config.Update.LastVersion} -> {__version__}",
             )
         config.Update.LastVersion = __version__
 

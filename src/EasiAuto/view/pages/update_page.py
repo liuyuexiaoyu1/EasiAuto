@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Literal
 
-import windows11toast
 from loguru import logger
 
 from PySide6.QtCore import Qt
@@ -42,9 +41,10 @@ from qfluentwidgets import (
 from EasiAuto.consts import CACHE_DIR
 from EasiAuto.core import utils
 from EasiAuto.models.config import DownloadSource, UpdateMode, config
+from EasiAuto.services.toast_service import ToastNotifier
 from EasiAuto.services.update_service import ChangeLog, UpdateDecision, update_checker
 from EasiAuto.view.components import SettingCard
-from EasiAuto.view.helpers import get_app, get_main_container, set_tooltip
+from EasiAuto.view.helpers import get_app, get_main_container, get_main_window, set_tooltip
 
 
 class HighlightedChangeLogCard(CardWidget):
@@ -462,13 +462,15 @@ class UpdatePage(QWidget):
                     if not self._decision.confirm_required
                     else f"需要确认的更新：{self._decision.target_version}"
                 )
-                windows11toast.notify(
-                    title="更新可用" if not self._decision.confirm_required else "存在需要确认的更新",
-                    body=f"新版本：{self._decision.target_version}\n打开应用查看详细信息",
-                    icon_placement=windows11toast.IconPlacement.APP_LOGO_OVERRIDE,
-                    icon_hint_crop=windows11toast.IconCrop.NONE,
-                    icon_src=utils.get_resource("icons/EasiAuto.ico"),
+                handle = ToastNotifier(self).show(
+                    "更新可用" if not self._decision.confirm_required else "存在需要确认的更新",
+                    f"新版本：{self._decision.target_version}",
+                    buttons=[
+                        {"content": "查看详情", "arguments": "open", "activationType": "protocol"},
+                        {"content": "忽略", "arguments": "dismiss", "activationType": "protocol"},
+                    ],
                 )
+                handle.activated.connect(self._on_toast_activated)
                 self.content_widget.set_change_log(self._decision.change_log)
                 if config.Update.Mode >= UpdateMode.CHECK_AND_DOWNLOAD and not self._decision.confirm_required:
                     update_checker.download_async(self._decision.downloads[0], filename=self._update_file)
@@ -498,6 +500,17 @@ class UpdatePage(QWidget):
         # 其他内部逻辑处理
         if new == UpdateStatus.FAILED and self._last_error:
             self._last_error = None
+
+    def _on_toast_activated(self, args: dict) -> None:
+        if args.get("arguments") == "open":
+            # 唤起窗口
+            window = get_main_window()
+            window.setWindowState(window.windowState() & ~Qt.WindowState.WindowMinimized)
+            window.show()
+            window.raise_()
+            window.activateWindow()
+            # 切换到更新页
+            window.switchTo(self)
 
     def update_ui(self, cfg: StateConfig):
         """使用状态数据更新界面"""
