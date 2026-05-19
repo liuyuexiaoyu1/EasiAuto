@@ -60,12 +60,18 @@ setThemeColor("#00C884")
 
 
 def shutdown():
-    with suppress(Exception):
-        announcement_service.shutdown()
-    with suppress(Exception):
-        update_checker.shutdown()
-    with suppress(Exception):
-        config.Statistics.TotalRunTime += (datetime.now(UTC) - config.Statistics.ThisInstanceLaunchTime).total_seconds()
+    for action in (
+        announcement_service.shutdown,
+        update_checker.shutdown,
+        lambda: setattr(
+            config.Statistics,
+            "TotalRunTime",
+            config.Statistics.TotalRunTime
+            + (datetime.now(UTC) - config.Statistics.ThisInstanceLaunchTime).total_seconds(),
+        ),
+    ):
+        with suppress(Exception):
+            action()
 
 
 atexit.register(shutdown)
@@ -99,16 +105,13 @@ class Launcher:
         self.login_running: bool = False
         self.stop_requested: bool = False
 
+        self._parser: ArgumentParser | None = None
         self.ipc_server: ArgvIpcServer | None = None
         self._ipc_context: bool = False
         self._current_login_triggered_via_ipc: bool = False
-        self._post_login_overlay_done: bool = False
-        self._post_login_update_done: bool = False
         self._post_login_update_thread: PostLoginUpdateThread | None = None
         automation_manager.finished.connect(self._on_login_finished)
         automation_manager.failed.connect(self._on_login_failed)
-
-        # TODO: 考虑简化状态
 
     def _show_settings_window(self) -> None:
         if self.main_window is None:
@@ -135,6 +138,8 @@ class Launcher:
             )
 
     def _build_parser(self) -> ArgumentParser:
+        if self._parser is not None:
+            return self._parser
         parser = ArgumentParser(prog="EasiAuto", description="一款自动登录希沃白板的小工具")
         subparsers = parser.add_subparsers(title="子命令", dest="command")
 
@@ -147,6 +152,7 @@ class Launcher:
 
         subparsers.add_parser("settings", help="打开设置界面")
         subparsers.add_parser("skip", help="跳过下一次登录")
+        self._parser = parser
         return parser
 
     def _on_login_finished(self, success: bool = True, error_message: str | None = None) -> None:
@@ -158,12 +164,7 @@ class Launcher:
         logger.info("登录任务已停止运行")
 
         # 关闭警示横幅
-        if self.banner is not None:
-            self.banner.close()
-            self.banner.deleteLater()
-            self.banner = None
-
-        self._current_login_triggered_via_ipc = False
+        self.banner = self._safe_cleanup_widget(self.banner)
 
         # 发送失败通知
         if error_message:
@@ -173,20 +174,18 @@ class Launcher:
                 f"{error_message}\n检查日志以获取详细信息",
             )
 
-        self._post_login_overlay_done = self.status_overlay is None
-        self._post_login_update_done = any(  # 以下情况不触发更新检查
-            (
-                not success,  # 登录失败
-                self.stop_requested,  # 登录中止
-                from_ipc,  # 通过 IPC 触发
-                not (config.Update.CheckAfterLogin and config.Update.Mode > UpdateMode.NEVER),
-            )
+        should_check_update = (
+            success
+            and not self.stop_requested
+            and not from_ipc
+            and config.Update.CheckAfterLogin
+            and config.Update.Mode > UpdateMode.NEVER
         )
 
-        if not self._post_login_overlay_done:
+        if self.status_overlay is not None:
             QTimer.singleShot(3000, lambda: self._close_status_overlay(from_ipc))
 
-        if not self._post_login_update_done:
+        if should_check_update:
             self._post_login_update_thread = PostLoginUpdateThread()
             self._post_login_update_thread.finished.connect(lambda: self._on_post_login_update_check_finished(from_ipc))
             self._post_login_update_thread.start()
@@ -197,25 +196,25 @@ class Launcher:
         self._on_login_finished(success=False, error_message=error_message)
 
     def _close_status_overlay(self, from_ipc: bool) -> None:
-        if self.status_overlay is not None:
-            self.status_overlay.close()
-            self.status_overlay.deleteLater()
-            self.status_overlay = None
-        self._post_login_overlay_done = True
+        self.status_overlay = self._safe_cleanup_widget(self.status_overlay)
         self._maybe_exit_after_login(from_ipc)
 
     def _on_post_login_update_check_finished(self, from_ipc: bool) -> None:
-        if self._post_login_update_thread is not None:
-            self._post_login_update_thread.deleteLater()
-            self._post_login_update_thread = None
-        self._post_login_update_done = True
+        self._post_login_update_thread = self._safe_cleanup_widget(self._post_login_update_thread)
         self._maybe_exit_after_login(from_ipc)
 
     def _maybe_exit_after_login(self, from_ipc: bool) -> None:
         if from_ipc:
             return
-        if self._post_login_overlay_done and self._post_login_update_done:
+        if self.status_overlay is None and self._post_login_update_thread is None:
             stop()
+
+    @staticmethod
+    def _safe_cleanup_widget(widget):
+        if widget is not None:
+            if hasattr(widget, "close"):
+                widget.close()
+            widget.deleteLater()
 
     def _on_stop_automation(self) -> None:
         automation_manager.stop()
@@ -413,7 +412,6 @@ class Launcher:
                 stop(0)
             logger.warning("检测到已有实例, 但参数转发失败")
             stop(1)
-
         logger.info(f"检测到已有实例, 命令 {command!r} 不允许转发, 当前实例退出")
         stop(0)
 
