@@ -8,13 +8,12 @@
 [![Last Commit](https://img.shields.io/github/last-commit/hxabcd/EasiAuto?color=orange&label=上次更新)](https://github.com/hxabcd/EasiAuto/commits/master)
 [![Downloads](https://img.shields.io/github/downloads/hxabcd/EasiAuto/total?color=brightgreen&label=下载统计)](https://github.com/hxabcd/EasiAuto/releases)
 
-[![QQ群](https://img.shields.io/badge/QQ群_(BSOD--MEMZ)-821944413-blue.svg)](https://qm.qq.com/q/5TV3Pvb2M2)
+[![QQ群](https://img.shields.io/badge/QQ群-1004364137-blue.svg)](https://qm.qq.com/q/7RcizZqkXC)
 [![哔哩哔哩](https://img.shields.io/badge/哔哩哔哩-%40hxabcd-FF69B4.svg)](https://space.bilibili.com/401002238)
 
 [![Python](https://img.shields.io/badge/Python-3.13+-blue.svg)](https://python.org)
-[![PySide6](https://img.shields.io/badge/PySide6-6.10+-green.svg)](https://doc.qt.io/qtforpython/)
+[![PySide6](https://img.shields.io/badge/PySide-6-green.svg)](https://doc.qt.io/qtforpython/)
 [![uv](https://img.shields.io/badge/uv-%23DE5FE9.svg)](https://docs.astral.sh/uv/)
-[![Sentry](https://img.shields.io/badge/Sentry-%23362D59.svg)](https://sentry.io/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-yellow.svg)](LICENSE)
 
 </div>
@@ -35,11 +34,12 @@
 ## ✨亮点
 
 * **易用的设置界面**：前所未有的 ClassIsland 自动化编辑体验，简单几步即可配置完成
-* **完备的登录方式**：具有 固定位置、图像识别、自动定位、进程注入 四种登录方案，根据需求灵活切换
+* **完备的登录方式**：具有固定位置、图像识别、自动定位、进程注入四种登录方案，根据需求灵活切换
 * **运行前显示警告弹窗**：自动运行不再措不及防，还可暂时推迟登录
-* **醒目的横幅警示**：兼具实用性与视觉冲击力，同时支持高度自定义
-* **单次跳过**：暂时禁用自动登录，满足特殊场景下的灵活需求
-* **错误重试**：无惧登录流程被打断
+* **登录状态浮窗**：即时知晓登录进度，随时中止登录
+* **醒目的横幅警示**：极具视觉冲击力，支持高度自定义
+* **单次跳过**：暂时禁用自动登录，满足灵活需求
+* **错误重试**：失败自动重试，无惧登录流程被打断
 * **自动更新**：及时接收功能增强和问题修复
 
 ## 🖼️ 截图
