@@ -33,6 +33,14 @@ class UIAAutomator(BaseAutomator):
             self.update_progress("切换后端至登录界面")
 
             dlg = Desktop(backend="uia").window(auto_id="IWBLogin")
+            dlg.print_control_identifiers()
+
+        # 显示隐私保护遮罩
+        if config.Experimental.PrivacyMask:
+            rect = dlg.child_window(auto_id="IwbqrCodeControl").rectangle()
+            x, y = rect.left, rect.top
+            w, h = rect.right - rect.left, rect.bottom - rect.top
+            self.privacy_mask_show.emit(x, y, w, h)
 
         # 切换至账号登录页
         self.check_interruption()
@@ -81,3 +89,6 @@ class UIAAutomator(BaseAutomator):
 
         login_button = account_login_page.child_window(auto_id="LoginButton", control_type="Button")
         login_button.click()
+
+        if config.Experimental.PrivacyMask:
+            self.privacy_mask_hide.emit()

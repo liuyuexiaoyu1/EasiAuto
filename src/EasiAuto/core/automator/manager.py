@@ -16,6 +16,8 @@ class AutomationManager(QObject):
     failed = Signal(str)
     task_updated = Signal(str)
     progress_updated = Signal(str)
+    privacy_mask_show = Signal(int, int, int, int)  # x, y, width, height
+    privacy_mask_hide = Signal()
 
     def __init__(self):
         super().__init__()
@@ -51,6 +53,8 @@ class AutomationManager(QObject):
         self._automator.failed.connect(self.failed)
         self._automator.task_updated.connect(self.task_updated)
         self._automator.progress_updated.connect(self.progress_updated)
+        self._automator.privacy_mask_show.connect(self.privacy_mask_show)
+        self._automator.privacy_mask_hide.connect(self.privacy_mask_hide)
 
         self._automator.start()
 

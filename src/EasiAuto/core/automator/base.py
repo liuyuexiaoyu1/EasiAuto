@@ -31,6 +31,9 @@ class BaseAutomator(QThread, metaclass=QABCMeta):
     failed = Signal(str)
     task_updated = Signal(str)
     progress_updated = Signal(str)
+    # NOTE: 无法在子线程创建 UI，需要将信号传回主线程
+    privacy_mask_show = Signal(int, int, int, int)  # x, y, width, height
+    privacy_mask_hide = Signal()
 
     def __init__(self, account: str, password: str) -> None:
         super().__init__()

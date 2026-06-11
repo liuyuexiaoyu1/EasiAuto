@@ -479,6 +479,31 @@ class AppConfig(ConfigModel):
     )
 
 
+class PrivacyMaskConfig(ConfigModel):
+    Enable: bool = Field(
+        default=True,
+        title="启用隐私保护遮罩",
+        description="登录时，在输入框上显示一个遮罩，用于遮挡可能的隐私信息。仅在固定位置与自动定位中可用\n下方选项用于控制固定位置下的显示，部分选项继承自位置坐标",
+    )
+    MaskLeftTop: tuple[int, int] = Field(
+        default=(868, 381),
+        title="遮罩位置",
+        description="即左上角的坐标",
+    )
+    MaskSize: tuple[int, int] = Field(
+        default=(440, 386),
+        title="遮罩大小",
+    )
+
+
+class ExperimentalConfig(ConfigModel):
+    PrivacyMask: PrivacyMaskConfig = Field(
+        default_factory=PrivacyMaskConfig,
+        title="隐私保护遮罩",
+        json_schema_extra={"icon": "VPN"},
+    )
+
+
 class ClassIslandConfig(ConfigModel):
     AutoPath: bool = Field(
         default=True,
@@ -591,19 +616,22 @@ class StatisticsConfig(ConfigModel):
 
 
 PAGE_INDEX: dict[str, list[str]] = {
-    "SettingsPage": ["Login", "Warning", "Banner", "StatusOverlay", "App"],
+    "SettingsPage": ["Login", "Warning", "Banner", "StatusOverlay", "App", "Experimental"],
     "AutomationPage": ["ClassIsland"],
     "UpdatePage": ["Update"],
 }
 
 
 class Config(ConfigModel):
+    # NOTE: 添加配置项后，需在上方 PAGE_INDEX 同步更新以生效
+
     # SettingsPage
     Login: LoginConfig = Field(default_factory=LoginConfig, title="登录选项")
     Warning: WarningConfig = Field(default_factory=WarningConfig, title="警告弹窗")
     Banner: BannerConfig = Field(default_factory=BannerConfig, title="警示横幅")
     StatusOverlay: StatusOverlayConfig = Field(default_factory=StatusOverlayConfig, title="状态浮窗")
     App: AppConfig = Field(default_factory=AppConfig, title="应用设置")
+    Experimental: ExperimentalConfig = Field(default_factory=ExperimentalConfig, title="实验性选项")
 
     # AutomationPage
     ClassIsland: ClassIslandConfig = Field(default_factory=ClassIslandConfig, title="ClassIsland 设置")

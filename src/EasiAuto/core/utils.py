@@ -6,7 +6,7 @@ import sys
 from abc import ABCMeta
 from contextlib import suppress
 from pathlib import Path
-from typing import NoReturn, cast
+from typing import NoReturn, cast, overload
 
 import psutil
 import pywintypes
@@ -69,6 +69,12 @@ class Point:
 
     scale: float | None = None
 
+    @overload
+    def __init__(self, x: int | float, y: int | float) -> None: ...
+
+    @overload
+    def __init__(self, x: tuple[int | float, int | float]) -> None: ...
+
     def __init__(self, x: int | float | tuple[int | float, int | float], y: int | float | None = None):
         if isinstance(x, tuple):
             x_val, y_val = x
@@ -103,6 +109,10 @@ class Point:
 
     def __truediv__(self, other: int | float) -> Point:
         return self.__mul__(1 / other)
+
+    def __iter__(self):
+        yield self.x
+        yield self.y
 
     def scaled(self) -> Point:
         """获取缩放后的坐标"""

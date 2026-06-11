@@ -25,6 +25,7 @@ from EasiAuto.core.runtime import ArgvIpcServer, check_singleton, init_exception
 from EasiAuto.core.utils import (
     Point,
     calc_relative_login_window_position,
+    get_scale,
     get_screen_size,
     get_screen_size_physical,
     init_exit_signal_handlers,
@@ -39,6 +40,7 @@ from EasiAuto.services.update_service import UpdateError, cleanup_update_cache, 
 from EasiAuto.view.components import (
     DialogResponse,
     PreRunPopup,
+    PrivacyMask,
     SmallStatusOverlay,
     StatusOverlay,
     StatusOverlayBase,
@@ -101,6 +103,7 @@ class Launcher:
         self.main_window: MainWindow | None = None
         self.banner: WarningBanner | None = None
         self.status_overlay: StatusOverlayBase | None = None
+        self.privacy_mask: PrivacyMask | None = None
 
         self.login_running: bool = False
         self.stop_requested: bool = False
@@ -112,6 +115,8 @@ class Launcher:
         self._post_login_update_thread: PostLoginUpdateThread | None = None
         automation_manager.finished.connect(self._on_login_finished)
         automation_manager.failed.connect(self._on_login_failed)
+        automation_manager.privacy_mask_show.connect(self._on_privacy_mask_show)
+        automation_manager.privacy_mask_hide.connect(self._on_privacy_mask_hide)
 
     def _show_settings_window(self) -> None:
         if self.main_window is None:
@@ -161,8 +166,9 @@ class Launcher:
         self.login_running = False
         logger.info("登录任务已停止运行")
 
-        # 关闭警示横幅
+        # 关闭覆盖窗口
         self.banner = self._safe_cleanup_widget(self.banner)
+        self.privacy_mask = self._safe_cleanup_widget(self.privacy_mask)
 
         # 发送失败通知
         if error_message:
@@ -213,6 +219,18 @@ class Launcher:
             if hasattr(widget, "close"):
                 widget.close()
             widget.deleteLater()
+
+    def _on_privacy_mask_show(self, x: int, y: int, w: int, h: int) -> None:
+        """显示隐私保护遮罩（输入均为绝对坐标）"""
+        scale = get_scale()
+        if self.privacy_mask is None:
+            self.privacy_mask = PrivacyMask()
+        # 由于 Qt 自带缩放，所以要将缩放重新转换为 100%
+        self.privacy_mask.setGeometry(int(x / scale), int(y / scale), int(w / scale), int(h / scale))
+        self.privacy_mask.show()
+
+    def _on_privacy_mask_hide(self):
+        self.privacy_mask = self._safe_cleanup_widget(self.privacy_mask)
 
     def _on_stop_automation(self) -> None:
         automation_manager.stop()

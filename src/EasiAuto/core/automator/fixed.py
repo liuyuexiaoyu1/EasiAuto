@@ -19,7 +19,8 @@ class FixedAutomator(PyAutoGuiBaseAutomator):
         # NOTE: 强制 Iwb
         return super().start_easinote(path, args if config.Login.IsIwb else "-m Display iwb")
 
-    def resolve_position(self, position: tuple[int, int]) -> tuple[int, int]:
+    @staticmethod
+    def resolve_position(position: tuple[int, int]) -> tuple[int, int]:
         """计算登录窗口内坐标的缩放，若设置未启用则返回原坐标"""
 
         if not config.Login.Position.EnableScaling:
@@ -51,35 +52,44 @@ class FixedAutomator(PyAutoGuiBaseAutomator):
             self.click(x, y)
             time.sleep(config.Login.Timeout.EnterLoginUI)
 
+        # 显示隐私保护遮罩
+        if config.Experimental.PrivacyMask:
+            x, y = FixedAutomator.resolve_position(config.Experimental.PrivacyMask.MaskLeftTop)
+            w, h = Point(config.Experimental.PrivacyMask.MaskSize).scaled()
+            self.privacy_mask_show.emit(x, y, w, h)
+
         # 切换至账号登录页
         self.check_interruption()
         self.update_progress("切换至账号登录页")
 
-        self.click(self.resolve_position(config.Login.Position.AccountLoginTab))
+        self.click(FixedAutomator.resolve_position(config.Login.Position.AccountLoginTab))
         time.sleep(config.Login.Timeout.SwitchTab)
 
         # 输入账号
         self.check_interruption()
         self.update_progress("输入账号")
 
-        self.click(self.resolve_position(config.Login.Position.AccountInput))
+        self.click(FixedAutomator.resolve_position(config.Login.Position.AccountInput))
         self.input(self.account)
 
         # 输入密码
         self.check_interruption()
         self.update_progress("输入密码")
 
-        self.click(self.resolve_position(config.Login.Position.PasswordInput))
+        self.click(FixedAutomator.resolve_position(config.Login.Position.PasswordInput))
         self.input(self.password)
 
         # 勾选同意用户协议
         self.check_interruption()
         self.update_progress("勾选同意用户协议")
 
-        self.click(self.resolve_position(config.Login.Position.AgreementCheckbox))
+        self.click(FixedAutomator.resolve_position(config.Login.Position.AgreementCheckbox))
 
         # 点击登录按钮
         self.check_interruption()
         self.update_progress("点击登录按钮")
 
         self.press("enter")
+
+        if config.Experimental.PrivacyMask:
+            self.privacy_mask_hide.emit()
