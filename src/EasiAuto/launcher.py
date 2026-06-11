@@ -127,7 +127,6 @@ class Launcher:
         if self.main_window:
             self.main_window.showMinimized()
 
-
         with self.from_ipc():
             self._start_login(
                 Namespace(

@@ -72,8 +72,8 @@ class BaseAutomator(QThread, metaclass=QABCMeta):
         if config.Login.EasiNote.AutoPath:
             try:
                 with winreg.OpenKey(
-                        winreg.HKEY_LOCAL_MACHINE,
-                        r"SOFTWARE\WOW6432Node\Seewo\EasiNote5",
+                    winreg.HKEY_LOCAL_MACHINE,
+                    r"SOFTWARE\WOW6432Node\Seewo\EasiNote5",
                 ) as key:
                     path_str = winreg.QueryValueEx(key, "ExePath")[0]
                     logger.debug(f"自动获取到路径: {path_str}")
@@ -304,13 +304,13 @@ class PyAutoGuiBaseAutomator(BaseAutomator):
             pyautogui.typewrite(text, interval=0.01)
 
     def click(
-            self,
-            x: SupportsInt | tuple[int, int] | Point,
-            y: SupportsInt | None = None,
-            *,
-            clicks: SupportsIndex = 1,
-            interval: float = 0,
-            duration: float = 0,
+        self,
+        x: SupportsInt | tuple[int, int] | Point,
+        y: SupportsInt | None = None,
+        *,
+        clicks: SupportsIndex = 1,
+        interval: float = 0,
+        duration: float = 0,
     ):
         """统一点击函数"""
         import pyautogui

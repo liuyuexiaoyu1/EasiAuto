@@ -14,6 +14,7 @@ from .base import BaseAutomator, LoginError
 INJECTOR_LAUNCHER = VENDOR_PATH / "Snoop" / "Snoop.InjectorLauncher.x86.exe"
 INJECTOR = VENDOR_PATH / "ENLoginInjector.dll"
 
+
 @dataclass
 class InjectTarget:
     """注入任务"""

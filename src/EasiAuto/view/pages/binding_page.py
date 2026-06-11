@@ -270,7 +270,7 @@ class BindingPage(QWidget):
         if not automation.enabled:
             label = f"{label} (禁用)"
         return label
-    
+
     @staticmethod
     def _profile_account_name(automation: BaseAutomation) -> str:
         if isinstance(automation, EasiAutomation):
