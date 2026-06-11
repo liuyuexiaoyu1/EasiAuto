@@ -9,18 +9,19 @@ from packaging.version import Version
 
 from EasiAuto import __version__
 
-# ------ 配置区 ------
 APP_NAME = "EasiAuto"
-COMPANY_NAME = "HxAbCd"
-MAIN = "main.py"
-OUTPUT_DIR = Path("build")
-
+ROOT = Path(__file__).parent.parent  # 项目根目录
+MAIN = str(ROOT / "main.py")
+OUTPUT_DIR = ROOT / "build"
+RESOURCES = ROOT / "resources"
+ICON = RESOURCES / "icons" / "EasiAuto.ico"
 
 VERSION = Version(__version__)
 
 
 def build_dllpatcher():
-    patcher_dir = Path("tools/DllPatcher")
+    """编译 DllPatcher (C# 辅助工具)"""
+    patcher_dir = ROOT / "tools/DllPatcher"
     if not patcher_dir.exists():
         print("DllPatcher directory not found, skipping...")
         return
@@ -34,49 +35,41 @@ def build_dllpatcher():
     print("DllPatcher build succeeded.")
 
 
-def run_nuitka(build_type: Literal["full", "lite"]):
-    """执行 Nuitka 打包"""
+def run_pyinstaller(build_type: Literal["full", "lite"]):
+    """执行 PyInstaller 打包"""
     target_dir = OUTPUT_DIR / build_type
 
     build_dllpatcher()
 
-    # Nuitka 基础命令 (使用 uv run 确保环境正确)
+    # PyInstaller 命令
     cmd = [
         "uv",
         "run",
-        "python",
-        "-m",
-        "nuitka",
+        "pyinstaller",
         # ------ 基本参数 ------
-        f"--main={MAIN}",
-        "--mode=standalone",
-        # "--msvc=latest",
-        "--assume-yes-for-downloads",
-        "--include-data-dir=resources=resources",
-        # ------ 导入控制 ------
-        "--enable-plugins=pyside6",
-        "--follow-imports",
-        "--include-module=comtypes.stream",
-        "--include-package=sentry_sdk.integrations",
-        "--nofollow-import-to=PySide6.QtPdf",
-        "--nofollow-import-to=PySide6.QtDataVisualization",
-        "--nofollow-import-to=PySide6.QtOpenGL",
-        "--nofollow-import-to=PySide6.QtOpenGLWidgets",
+        f"--name={APP_NAME}",
+        "--onedir",
+        "--clean",
+        "--noconfirm",
+        # ------ 排除不需要的 Qt 模块（减小体积）------
+        "--exclude-module=PySide6.QtPdf",
+        "--exclude-module=PySide6.QtDataVisualization",
+        "--exclude-module=PySide6.QtOpenGL",
+        "--exclude-module=PySide6.QtOpenGLWidgets",
         # ------ 输出 ------
-        f"--output-dir={target_dir}",
-        f"--output-filename={APP_NAME}.exe",
-        "--remove-output",
+        f"--distpath={target_dir}",
+        f"--workpath={OUTPUT_DIR / 'work' / build_type}",
+        f"--specpath={OUTPUT_DIR / 'spec' / build_type}",
         # ------ Windows 配置 ------
-        "--windows-console-mode=disable",
-        "--windows-icon-from-ico=resources/icons/EasiAuto.ico",
-        f"--company-name={COMPANY_NAME}",
-        f"--product-name={APP_NAME}",
-        f"--product-version={VERSION.base_version}",
+        "--windowed",
+        f"--icon={ICON}",
+        # ------ 入口 ------
+        MAIN,
     ]
 
     if build_type == "lite":
         print("Building LITE version...")
-        cmd.append("--nofollow-import-to=numpy")
+        cmd.insert(-1, "--exclude-module=numpy")
     else:
         print("Building FULL version...")
 
@@ -89,18 +82,27 @@ def run_nuitka(build_type: Literal["full", "lite"]):
         print(f"Build failed: {e}")
         sys.exit(1)
 
-    # FULL 版本手动复制 vendors 目录
+    # PyInstaller --onedir 输出到 {distpath}/{name}/
+    dist_path = target_dir / APP_NAME
+
+    # 复制 resources
+    dest_resources = dist_path / "resources"
+    if dest_resources.exists():
+        shutil.rmtree(dest_resources)
+    print(f"Copying resources to {dest_resources}...")
+    shutil.copytree(RESOURCES, dest_resources)
+
+    # 复制 vendors 目录 (FULL)
     if build_type == "full":
-        dist_path = target_dir / "main.dist"
-        if Path("vendors").exists():
+        vendors_dir = ROOT / "vendors"
+        if vendors_dir.exists():
             dest_vendors = dist_path / "vendors"
-            dest_vendors.parent.mkdir(parents=True, exist_ok=True)
             if dest_vendors.exists():
                 shutil.rmtree(dest_vendors)
             print(f"Copying vendors to {dest_vendors}...")
-            shutil.copytree("vendors", dest_vendors)
+            shutil.copytree(vendors_dir, dest_vendors)
 
-        dllpatcher_dir = Path("tools/DllPatcher/bin/Release/net6.0")
+        dllpatcher_dir = ROOT / "tools/DllPatcher/bin/Release/net6.0"
         if dllpatcher_dir.exists():
             dest_patcher = dist_path / "DllPatcher"
             if dest_patcher.exists():
@@ -108,24 +110,30 @@ def run_nuitka(build_type: Literal["full", "lite"]):
             print(f"Copying DllPatcher to {dest_patcher}...")
             shutil.copytree(dllpatcher_dir, dest_patcher)
 
-    # 删除冗余文件
-    if build_type == "lite":
-        for item in target_dir.glob("*.dll"):
-            if item.name.startswith("qt6pdf"):
-                print(f"Removing redundant file: {item}")
-                item.unlink()
+    # 删除冗余/不需要的 DLL
+    redundant_patterns = [
+        "**/opengl32sw.dll",
+        "**/Qt6Pdf*.dll",
+        "**/Qt6Qml*.dll",
+        "**/Qt6Quick*.dll",
+        "**/Qt6OpenGL*.dll",
+        "**/Qt6OpenGLWidgets*.dll",
+    ]
+    for pattern in redundant_patterns:
+        for item in dist_path.glob(pattern):
+            print(f"Removing redundant file: {item}")
+            item.unlink()
 
     # 压缩打包结果
     names = [APP_NAME, f"v{VERSION}"]
     if build_type == "lite":
-        names.append("_lite")
+        names.append("lite")
     name = "_".join(names)
 
     zip_path = OUTPUT_DIR / name
     print(f"Creating archive: {zip_path}.zip ...")
 
-    src_dir = target_dir / "main.dist"
-    shutil.make_archive(str(zip_path), "zip", src_dir)
+    shutil.make_archive(str(zip_path), "zip", dist_path)
     print(f"Archive completed: {zip_path}.zip")
 
 
@@ -134,4 +142,4 @@ if __name__ == "__main__":
     parser.add_argument("--type", choices=["full", "lite"], default="full")
     args = parser.parse_args()
 
-    run_nuitka(args.type)
+    run_pyinstaller(args.type)

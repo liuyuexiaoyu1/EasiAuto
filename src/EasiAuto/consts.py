@@ -4,7 +4,7 @@ from importlib.util import find_spec
 from pathlib import Path
 
 # 基本
-IS_DEV = "__compiled__" not in globals()
+IS_DEV = not getattr(sys, "frozen", False)
 EA_EXECUTABLE = ((Path(sys.executable) if not IS_DEV else Path(sys.argv[0])).parent / "EasiAuto.exe").resolve()
 EA_BASEDIR = EA_EXECUTABLE.parent
 
