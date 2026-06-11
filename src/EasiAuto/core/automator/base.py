@@ -32,12 +32,13 @@ class BaseAutomator(QThread, metaclass=QABCMeta):
     task_updated = Signal(str)
     progress_updated = Signal(str)
 
-    def __init__(self, account: str, password: str) -> None:
+    def __init__(self, account: str, password: str, token_data: dict | None = None) -> None:
         super().__init__()
         self.setObjectName(f"Automator:{self.__class__.__name__}")
 
         self.account: str = account
         self.password: str = password
+        self.token_data: dict | None = token_data
         self.easinote_path: Path | None = self.get_easinote_path()
         self.easiauto_hwnd: int | None = None
 
@@ -72,8 +73,8 @@ class BaseAutomator(QThread, metaclass=QABCMeta):
         if config.Login.EasiNote.AutoPath:
             try:
                 with winreg.OpenKey(
-                    winreg.HKEY_LOCAL_MACHINE,
-                    r"SOFTWARE\WOW6432Node\Seewo\EasiNote5",
+                        winreg.HKEY_LOCAL_MACHINE,
+                        r"SOFTWARE\WOW6432Node\Seewo\EasiNote5",
                 ) as key:
                     path_str = winreg.QueryValueEx(key, "ExePath")[0]
                     logger.debug(f"自动获取到路径: {path_str}")
@@ -128,7 +129,6 @@ class BaseAutomator(QThread, metaclass=QABCMeta):
     def _log_all_windows(self):
         windows = self._enum_all_windows()
 
-        # 按窗口标题排序
         windows.sort(key=lambda x: x[1])
 
         logger.debug("==========当前窗口==========")
@@ -168,10 +168,10 @@ class BaseAutomator(QThread, metaclass=QABCMeta):
             elapsed += interval
         return False
 
-    def restart_easinote(self):
-        """重启希沃进程"""
+    def _after_easinote_dead(self):
+        pass
 
-        # 终止
+    def restart_easinote(self):
         if self.easinote_path is None:
             raise LoginCancelled("希沃白板目录不存在")
 
@@ -179,7 +179,8 @@ class BaseAutomator(QThread, metaclass=QABCMeta):
         self.kill_processes()
         self.check_interruption()
 
-        # 启动
+        self._after_easinote_dead()
+
         self.update_progress("启动希沃白板")
         self.start_easinote(path=self.easinote_path, args=config.Login.EasiNote.Args)
         self.check_interruption()
@@ -304,13 +305,13 @@ class PyAutoGuiBaseAutomator(BaseAutomator):
             pyautogui.typewrite(text, interval=0.01)
 
     def click(
-        self,
-        x: SupportsInt | tuple[int, int] | Point,
-        y: SupportsInt | None = None,
-        *,
-        clicks: SupportsIndex = 1,
-        interval: float = 0,
-        duration: float = 0,
+            self,
+            x: SupportsInt | tuple[int, int] | Point,
+            y: SupportsInt | None = None,
+            *,
+            clicks: SupportsIndex = 1,
+            interval: float = 0,
+            duration: float = 0,
     ):
         """统一点击函数"""
         import pyautogui

@@ -9,98 +9,94 @@ from packaging.version import Version
 
 from EasiAuto import __version__
 
-# ------ 配置区 ------
 APP_NAME = "EasiAuto"
-COMPANY_NAME = "HxAbCd"
 MAIN = "main.py"
 OUTPUT_DIR = Path("build")
-
 
 VERSION = Version(__version__)
 
 
-def run_nuitka(build_type: Literal["full", "lite"]):
-    """执行 Nuitka 打包"""
-    target_dir = OUTPUT_DIR / build_type
+def build_dllpatcher():
+    patcher_dir = Path("tools/DllPatcher")
+    if not patcher_dir.exists():
+        print("DllPatcher directory not found, skipping...")
+        return
+    print("Building DllPatcher...")
+    subprocess.run(
+        ["dotnet", "build", "-c", "Release"],
+        cwd=str(patcher_dir),
+        check=True,
+        shell=True,
+    )
+    dllpatcher_out = Path("tools/DllPatcher/bin/Release/net8.0")
+    dest = Path("vendors/DllPatcher")
+    if dest.exists():
+        shutil.rmtree(dest)
+    shutil.copytree(dllpatcher_out, dest)
+    print("DllPatcher build succeeded.")
 
-    # Nuitka 基础命令 (使用 uv run 确保环境正确)
+
+def run_pyinstaller(build_type: Literal["full", "lite"]):
+    target_dir = OUTPUT_DIR / build_type
+    dist_path = target_dir / "dist"
+
+    build_dllpatcher()
+
+    spec_file = target_dir / f"{APP_NAME}.spec"
+    if spec_file.exists():
+        spec_file.unlink()
+
+    resources_src = str(Path("resources").resolve())
+    vendors_src = str(Path("vendors").resolve())
+    icon_src = str(Path("resources/icons/EasiAuto.ico").resolve())
+
     cmd = [
         "uv",
         "run",
-        "python",
-        "-m",
-        "nuitka",
-        # ------ 基本参数 ------
-        f"--main={MAIN}",
-        "--mode=standalone",
-        # "--msvc=latest",
-        "--assume-yes-for-downloads",
-        "--include-data-dir=resources=resources",
-        # ------ 导入控制 ------
-        "--enable-plugins=pyside6",
-        "--follow-imports",
-        "--include-module=comtypes.stream",
-        "--include-package=sentry_sdk.integrations",
-        "--nofollow-import-to=PySide6.QtPdf",
-        "--nofollow-import-to=PySide6.QtDataVisualization",
-        "--nofollow-import-to=PySide6.QtOpenGL",
-        "--nofollow-import-to=PySide6.QtOpenGLWidgets",
-        # ------ 输出 ------
-        f"--output-dir={target_dir}",
-        f"--output-filename={APP_NAME}.exe",
-        "--remove-output",
-        # ------ Windows 配置 ------
-        "--windows-console-mode=disable",
-        "--windows-icon-from-ico=resources/icons/EasiAuto.ico",
-        f"--company-name={COMPANY_NAME}",
-        f"--product-name={APP_NAME}",
-        f"--product-version={VERSION.base_version}",
+        "pyinstaller",
+        MAIN,
+        "--onedir",
+        "--windowed",
+        "--clean",
+        f"--name={APP_NAME}",
+        f"--distpath={dist_path}",
+        f"--workpath={target_dir / 'build'}",
+        f"--specpath={target_dir}",
+        "--add-data", f"{resources_src}{';'}resources",
+        "--add-data", f"{vendors_src}{';'}vendors",
+        "--hidden-import", "comtypes.stream",
+        "--hidden-import", "sentry_sdk.integrations",
+        f"--icon={icon_src}",
     ]
 
     if build_type == "lite":
         print("Building LITE version...")
-        cmd.append("--nofollow-import-to=numpy")
+        cmd += ["--exclude-module", "numpy", "--exclude-module", "cv2"]
     else:
         print("Building FULL version...")
 
-    print(f"Executing command: {' '.join(cmd)}")
+    print(f"Executing: {' '.join(cmd)}")
 
     try:
         subprocess.run(cmd, check=True)
-        print(f"{build_type.upper()} build succeeded! Output path: {target_dir}")
+        print(f"{build_type.upper()} build succeeded! Output: {dist_path / APP_NAME}")
     except subprocess.CalledProcessError as e:
         print(f"Build failed: {e}")
         sys.exit(1)
 
-    # FULL 版本手动复制 vendors 目录
-    if build_type == "full":
-        dist_path = target_dir / "main.dist"
-        if Path("vendors").exists():
-            dest_vendors = dist_path / "vendors"
-            dest_vendors.parent.mkdir(parents=True, exist_ok=True)
-            if dest_vendors.exists():
-                shutil.rmtree(dest_vendors)
-            print(f"Copying vendors to {dest_vendors}...")
-            shutil.copytree("vendors", dest_vendors)
-
-    # 删除冗余文件
     if build_type == "lite":
-        for item in target_dir.glob("*.dll"):
+        for item in (dist_path / APP_NAME).glob("*.dll"):
             if item.name.startswith("qt6pdf"):
                 print(f"Removing redundant file: {item}")
                 item.unlink()
 
-    # 压缩打包结果
     names = [APP_NAME, f"v{VERSION}"]
     if build_type == "lite":
         names.append("_lite")
-    name = "_".join(names)
-
-    zip_path = OUTPUT_DIR / name
+    zip_name = "_".join(names)
+    zip_path = OUTPUT_DIR / zip_name
     print(f"Creating archive: {zip_path}.zip ...")
-
-    src_dir = target_dir / "main.dist"
-    shutil.make_archive(str(zip_path), "zip", src_dir)
+    shutil.make_archive(str(zip_path), "zip", dist_path / APP_NAME)
     print(f"Archive completed: {zip_path}.zip")
 
 
@@ -108,5 +104,4 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="EasiAuto build workflow")
     parser.add_argument("--type", choices=["full", "lite"], default="full")
     args = parser.parse_args()
-
-    run_nuitka(args.type)
+    run_pyinstaller(args.type)
