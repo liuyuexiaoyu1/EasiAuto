@@ -4,8 +4,6 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from packaging.version import InvalidVersion, Version
-
 from PySide6.QtCore import QDate, Qt, QThread, QTime, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -36,6 +34,7 @@ from qfluentwidgets import (
 
 from EasiAuto import __version__
 
+from ._announcement_core import normalize_announcement, normalize_payload  # noqa: F401 (re-export)
 from ._shared import (
     ANNOUNCEMENT_FILE_PATH,
     ANNOUNCEMENT_REPO,
@@ -51,7 +50,7 @@ PUSH = "PUSH"
 TIMEZONE = "+08:00"
 
 
-# ── Pure business logic ────────────────────────────────────────────────
+# ── Qt-dependent helpers ───────────────────────────────────────────────
 
 
 def _parse_iso(value: str | None) -> tuple[QDate | None, QTime | None]:
@@ -66,6 +65,7 @@ def _parse_iso(value: str | None) -> tuple[QDate | None, QTime | None]:
 
 
 def _format_iso(qd: QDate | None, qt: QTime | None) -> str | None:
+    """将 QDate/QTime 转换为 ISO 8601 字符串（供 normalize_announcement 回调使用）。"""
     if qd is None or qt is None or not qd.isValid() or not qt.isValid():
         return None
     d = qd.toPython()
@@ -76,96 +76,6 @@ def _format_iso(qd: QDate | None, qt: QTime | None) -> str | None:
 def _today_qdt() -> tuple[QDate, QTime]:
     now = datetime.now()
     return QDate(now.year, now.month, now.day), QTime(now.hour, now.minute)
-
-
-def _parse_version(value: Any, *, field_name: str) -> str | None:
-    """解析并校验版本号字符串，无效时返回 None。"""
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value.strip():
-        return None
-
-    text = value.strip()
-    try:
-        Version(text)
-    except InvalidVersion as e:
-        raise ValueError(f"字段 {field_name} 不是有效版本号: {text}") from e
-
-    return text
-
-
-def normalize_announcement(item: dict[str, Any]) -> dict[str, Any]:
-    raw_id = item.get("id", "")
-    raw_title = item.get("title", "")
-    raw_content = item.get("content", "")
-
-    if not isinstance(raw_id, str) or not raw_id.strip():
-        raise ValueError("字段 id 不能为空")
-    if not isinstance(raw_title, str) or not raw_title.strip():
-        raise ValueError("字段 title 不能为空")
-    if not isinstance(raw_content, str) or not raw_content.strip():
-        raise ValueError("字段 content 不能为空")
-
-    severity = item.get("severity", "info")
-    if severity not in VALID_SEVERITIES:
-        severity = "info"
-
-    start_at = (
-        _format_iso(item.get("start_at_date"), item.get("start_at_time")) if item.get("start_at_enabled") else None
-    )
-    end_at = _format_iso(item.get("end_at_date"), item.get("end_at_time")) if item.get("end_at_enabled") else None
-
-    if start_at and end_at and datetime.fromisoformat(end_at) < datetime.fromisoformat(start_at):
-        raise ValueError("结束时间不能早于开始时间")
-
-    published_at = item.get("published_at", "")
-    try:
-        published_at = datetime.fromisoformat(published_at.replace("Z", "+00:00")).isoformat()
-    except (ValueError, TypeError):
-        published_at = datetime.now().isoformat()
-
-    link = item.get("link")
-    if link is not None and not isinstance(link, str):
-        raise ValueError("字段 link 必须是字符串")
-
-    min_version = _parse_version(item.get("min_version"), field_name="min_version")
-    max_version = _parse_version(item.get("max_version"), field_name="max_version")
-
-    return {
-        "id": raw_id.strip(),
-        "title": raw_title.strip(),
-        "content": raw_content.strip(),
-        "severity": severity,
-        "start_at": start_at,
-        "end_at": end_at,
-        "published_at": published_at,
-        "link": link.strip() if isinstance(link, str) else "",
-        "min_version": min_version,
-        "max_version": max_version,
-    }
-
-
-def normalize_payload(payload: Any) -> dict[str, list[dict[str, Any]]]:
-    if isinstance(payload, dict):
-        raw = payload.get("announcements", [])
-    elif isinstance(payload, list):
-        raw = payload
-    else:
-        raise ValueError("公告文件格式不正确")
-
-    if not isinstance(raw, list):
-        raise ValueError("announcements 必须是数组")
-
-    announcements = [normalize_announcement(item) for item in raw]
-    ids = [item["id"] for item in announcements]
-    if len(ids) != len(set(ids)):
-        raise ValueError("存在重复的公告 id")
-
-    announcements.sort(
-        key=lambda item: datetime.fromisoformat(item["published_at"].replace("Z", "+00:00")),
-        reverse=True,
-    )
-    return {"announcements": announcements}
 
 
 # ── Network Thread ─────────────────────────────────────────────────────
@@ -527,7 +437,8 @@ class AnnouncementManagerWidget(QWidget):
                 "end_at_date": self.end_picker.getDate() if self.end_enabled_cb.isChecked() else None,
                 "end_at_time": self.end_time_picker.getTime() if self.end_enabled_cb.isChecked() else None,
                 "end_at_enabled": self.end_enabled_cb.isChecked(),
-            }
+            },
+            format_iso=_format_iso,
         )
 
     def _save_current(self):
