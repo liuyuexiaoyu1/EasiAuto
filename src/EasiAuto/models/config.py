@@ -298,7 +298,7 @@ class LoginConfig(ConfigModel):
     SkipIfLoggedIn: bool = Field(
         default=True,
         title="已登录则跳过",
-        description="若当前希沃白板已登录同一账号，则跳过重启和登录流程",
+        description="若当前希沃白板已登录同一账号，则跳过登录",
         json_schema_extra={"icon": "PageRight"},
     )
     KillAgent: bool = Field(
@@ -377,6 +377,12 @@ class WarningConfig(ConfigModel):
         description="选择推迟时要等待的时长（秒）",
         json_schema_extra={"icon": "History"},
         validation_alias="Delay",
+    )
+    ShowUserName: bool = Field(
+        default=True,
+        title="显示用户名",
+        description="在警告弹窗中显示目标登录账号的用户名",
+        json_schema_extra={"icon": "QuickNote"},
     )
 
 

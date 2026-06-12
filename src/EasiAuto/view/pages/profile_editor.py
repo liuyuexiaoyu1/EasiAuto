@@ -39,7 +39,7 @@ from qfluentwidgets import (
 from EasiAuto.consts import IS_FULL
 from EasiAuto.core.utils import create_shortcut
 from EasiAuto.integrations.classisland_manager import classisland_manager as ci_manager
-from EasiAuto.models.profile import BaseAutomation, EasiAutomation, ProfileChangeReason, QrcodeAutomation, profile
+from EasiAuto.models.profile import BaseAutomation, EasiAutomation, ProfileChangeReason, QrCodeAutomation, profile
 from EasiAuto.services.binding_service import ClassIslandBindingBackend
 from EasiAuto.view.components import SettingCard
 from EasiAuto.view.components.qfw_widgets import ListWidget, PillOverflowBar, PillPushButton
@@ -370,7 +370,7 @@ class ProfileManagePage(QWidget):
         """比对缓存头像与网络头像，仅更新有变化的"""
         changed = False
         for auto in profile.list_automation():
-            if not isinstance(auto, QrcodeAutomation) or not auto.token or not auto.user_id:
+            if not isinstance(auto, QrCodeAutomation) or not auto.token or not auto.user_id:
                 continue
 
             avatar_url = fetch_qrcode_avatar(auto.token)
@@ -451,9 +451,9 @@ class ProfileManagePage(QWidget):
         self.editor_widget.setEnabled(True)
 
     @staticmethod
-    def _find_existing_qrcode(user_id: str) -> QrcodeAutomation | None:
+    def _find_existing_qrcode(user_id: str) -> QrCodeAutomation | None:
         for item in profile.list_automation():
-            if isinstance(item, QrcodeAutomation) and item.user_id == user_id:
+            if isinstance(item, QrCodeAutomation) and item.user_id == user_id:
                 return item
         return None
 
@@ -473,7 +473,7 @@ class ProfileManagePage(QWidget):
         try:
             import requests
 
-            resp = requests.get(avatar_url, timeout=15)
+            resp = requests.get(avatar_url, timeout=1)
             if resp.status_code == 200:
                 cache_file.write_bytes(resp.content)
                 logger.debug(f"头像已缓存: {cache_file}")
@@ -502,7 +502,7 @@ class ProfileManagePage(QWidget):
             if avatar_url:
                 avatar_path = self._cache_qrcode_avatar(user_id, avatar_url)
 
-        automation = QrcodeAutomation(
+        automation = QrCodeAutomation(
             name=nick_name,
             token=token,
             user_id=user_id,
@@ -534,7 +534,7 @@ class ProfileManagePage(QWidget):
         if not info or info.get("statusCode") != 202:
             InfoBar.warning(
                 title="导入失败",
-                content="当前未登录希沃白板，或管道不可用",
+                content="未登录希沃白板或管道不可用",
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP,
@@ -566,7 +566,7 @@ class ProfileManagePage(QWidget):
             if avatar_url:
                 avatar_path = self._cache_qrcode_avatar(user_id, avatar_url)
 
-        automation = QrcodeAutomation(
+        automation = QrCodeAutomation(
             name=nick_name,
             token=token,
             user_id=user_id,
@@ -616,7 +616,7 @@ class ProfileManagePage(QWidget):
                 self.account_edit.setDisabled(False)
                 self.password_edit.setDisabled(False)
                 self.account_name_edit.setDisabled(True)
-            case QrcodeAutomation():
+            case QrCodeAutomation():
                 self.account_edit.setText("")
                 self.password_edit.setText("")
                 self.account_name_edit.setText("")

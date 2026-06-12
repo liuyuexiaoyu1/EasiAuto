@@ -33,7 +33,7 @@ from EasiAuto.core.utils import (
     stop,
 )
 from EasiAuto.models.config import UpdateMode, config
-from EasiAuto.models.profile import BaseAutomation, EasiAutomation, QrcodeAutomation, profile
+from EasiAuto.models.profile import BaseAutomation, EasiAutomation, QrCodeAutomation, profile
 from EasiAuto.services.announcement_service import announcement_service
 from EasiAuto.services.toast_service import ToastNotifier
 from EasiAuto.services.update_service import UpdateError, cleanup_update_cache, update_checker
@@ -255,7 +255,7 @@ class Launcher:
                         logger.error(f"档案 {args.id} 的密码为空")
                         return None
                     return auto.type, (auto.account, auto.password)
-                case QrcodeAutomation():
+                case QrCodeAutomation():
                     return auto.type, {
                         "token": auto.token,
                         "userId": auto.user_id or "",
@@ -304,18 +304,19 @@ class Launcher:
         # 显示警告弹窗
         if config.Warning.Enabled and not args.manual:
             try:
-                # 提取显示名称
-                display_name = ""
-                if args.id:
-                    auto = profile.get_automation(args.id)
-                    if auto:
-                        display_name = auto.display_name or ""
-                if not display_name and isinstance(credentials, tuple):
-                    display_name = credentials[0]
-
                 msgbox = PreRunPopup()
-                if display_name:
-                    msgbox.set_account(display_name)
+
+                if config.Warning.ShowUserName:
+                    display_name = ""
+                    if args.id:
+                        auto = profile.get_automation(args.id)
+                        if auto:
+                            display_name = auto.display_name or ""
+                    if not display_name and isinstance(credentials, tuple):
+                        display_name = credentials[0]
+                    if display_name:
+                        msgbox.set_account_name(display_name)
+
                 delays = 0
                 while True:
                     if delays >= config.Warning.MaxDelays:

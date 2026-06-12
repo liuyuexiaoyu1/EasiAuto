@@ -18,7 +18,7 @@ from qfluentwidgets import (
 )
 
 QRCODE_URL = "https://id.seewo.com/scan/qrcode"
-CHECK_URL = "https://id.seewo.com/scan/pcCheckQrcode"
+CHECK_URL = "https://id.seewo.com/scan/pcCheckQrCode"
 QRCODE_TTL = 110
 QR_SIZE = 260
 
@@ -298,7 +298,7 @@ def fetch_qrcode_avatar(token: str) -> str | None:
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Accept": "application/json",
             },
-            timeout=15,
+            timeout=1,
         )
         if resp.status_code != 200:
             return None

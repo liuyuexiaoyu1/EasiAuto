@@ -141,7 +141,7 @@ class EasiAutomation(BaseAutomation):
             return ""
 
 
-class QrcodeAutomation(BaseAutomation):
+class QrCodeAutomation(BaseAutomation):
     """二维码登录档案"""
 
     type: Literal["qrcode"] = Field(default="qrcode")
@@ -188,7 +188,7 @@ class QrcodeAutomation(BaseAutomation):
 
 
 Automation = Annotated[
-    EasiAutomation | QrcodeAutomation,
+    EasiAutomation | QrCodeAutomation,
     Field(discriminator="type"),
 ]
 

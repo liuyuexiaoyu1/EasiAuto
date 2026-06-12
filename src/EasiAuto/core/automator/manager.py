@@ -38,6 +38,7 @@ class AutomationManager(QObject):
             return
 
         if type == "qrcode":
+            # TODO: 考虑将工具函数提取至独立文件
             from EasiAuto.core.automator.qrcode import QRCodeAutomator
 
             logger.info("检测到二维码档案")

@@ -3,7 +3,9 @@ repos:
     rev: v6.0.0
     hooks:
       - id: end-of-file-fixer
+        exclude: "vendors"
       - id: trailing-whitespace
+        exclude: "vendors"
       - id: check-merge-conflict
       - id: check-added-large-files
       - id: detect-private-key

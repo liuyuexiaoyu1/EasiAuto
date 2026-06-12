@@ -21,7 +21,7 @@ from qfluentwidgets import (
     VerticalSeparator,
 )
 
-from EasiAuto.models.profile import BaseAutomation, EasiAutomation, QrcodeAutomation, profile
+from EasiAuto.models.profile import BaseAutomation, EasiAutomation, QrCodeAutomation, profile
 from EasiAuto.services.binding_service import ClassIslandBindingBackend, SubjectRef
 from EasiAuto.view.helpers import get_main_container
 
@@ -133,10 +133,10 @@ class ProfileCard(CardWidget):
         text_layout.setSpacing(0)
 
         self.name_label = SubtitleLabel()
-        self.account_label = BodyLabel()
+        self.detail_label = BodyLabel()
 
         text_layout.addWidget(self.name_label)
-        text_layout.addWidget(self.account_label)
+        text_layout.addWidget(self.detail_label)
 
         self.command_bar = CommandBar()
         self.command_bar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
@@ -156,13 +156,20 @@ class ProfileCard(CardWidget):
 
     def _update_display(self):
         auto = self._automation
-        display_name = (auto.display_name or "未命名档案") if hasattr(auto, "display_name") else "未命名档案"
-        if hasattr(auto, "enabled") and not auto.enabled:
-            display_name = f"{display_name} (禁用)"
+        display_name = auto.display_name or "未命名档案"
+        if not auto.enabled:
+            display_name = f"{display_name} (已禁用)"
         self.name_label.setText(display_name)
-        self.account_label.setText(getattr(auto, "account_name", "") or getattr(auto, "account", "") or "")
 
-        if isinstance(auto, QrcodeAutomation) and auto.avatar:
+        if isinstance(auto, EasiAutomation):
+            detail_text = auto.account_name or auto.account or ""
+        elif isinstance(auto, QrCodeAutomation):
+            detail_text = "二维码档案"
+        else:
+            detail_text = ""
+        self.detail_label.setText(detail_text)
+
+        if isinstance(auto, QrCodeAutomation) and auto.avatar:
             try:
                 self.avatar_label.setImage(str(auto.avatar))
             except Exception:
@@ -289,7 +296,7 @@ class BindingPage(QWidget):
     def _profile_account_name(automation: BaseAutomation) -> str:
         if isinstance(automation, EasiAutomation):
             return automation.account_name or automation.account or ""
-        if isinstance(automation, QrcodeAutomation):
+        if isinstance(automation, QrCodeAutomation):
             return automation.nick_name or automation.user_id or ""
         return ""
 

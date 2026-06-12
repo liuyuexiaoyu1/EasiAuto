@@ -17,20 +17,21 @@ from EasiAuto.core.utils import Point, QABCMeta, get_scale, get_screen_size_phys
 from EasiAuto.models.config import config
 
 
-class LoginCancelled(Exception):
-    pass
+class LoginCancelled(Exception):  # noqa: N818
+    """登录被手动取消"""
 
 
 class LoginError(Exception):
-    pass
+    """登录异常"""
 
-
-class _AlreadyLoggedIn(Exception):
-    """已登录同一账户，跳过"""
-
-    def __init__(self, nickname: str):
-        super().__init__(f"已登录「{nickname}」，跳过")
-        self.nickname = nickname
+    def __init__(self, message: str, retry: bool = True) -> None:
+        """
+        Args:
+            message (str): 异常信息
+            retry (bool, optional): 是否允许错误重试
+        """
+        super().__init__(message)
+        self.retry = retry
 
 
 class BaseAutomator(QThread, metaclass=QABCMeta):
@@ -49,8 +50,8 @@ class BaseAutomator(QThread, metaclass=QABCMeta):
 
         self.account: str = account
         self.password: str = password
-        self.easinote_path: Path | None = self.get_easinote_path()
-        self.easiauto_hwnd: int | None = None
+        self.easinote_path: Path | None = None
+        self.easinote: int | None = None
 
         self._prev_task: str | None = None
         self._prev_progress: str | None = None
@@ -161,7 +162,7 @@ class BaseAutomator(QThread, metaclass=QABCMeta):
         while elapsed < timeout:
             self.check_interruption()
 
-            self.update_progress(f"等待{title}窗口打开 ({int(elapsed)}/{int(timeout)}s)")
+            self.update_progress(f"等待{title}窗口出现 ({int(elapsed)}/{int(timeout)}s)")
             if config.Debug.AlternateFindWindowMethod:
                 windows = self._enum_all_windows()
                 for w in windows:
@@ -182,32 +183,34 @@ class BaseAutomator(QThread, metaclass=QABCMeta):
         pass
 
     def restart_easinote(self):
-        if self.easinote_path is None:
-            raise LoginCancelled("希沃白板目录不存在")
-
-        # 检查是否已登录同一账户
-        if config.Login.SkipIfLoggedIn and getattr(self, "_target_user_id", ""):
-            from EasiAuto.core.automator.qrcode import fetch_current_login_info
-
-            info = fetch_current_login_info()
-            if info and info.get("statusCode") == 202:
-                current_uid = info.get("userId", "")
-                if current_uid and current_uid == self._target_user_id:
-                    nick = info.get("nickName", "") or info.get("userName", "") or current_uid
-                    logger.info(f"希沃白板已登录同一账户「{nick}」(userId={current_uid})，跳过重启和登录")
-                    self.update_progress(f"已登录「{nick}」, 无需重复登录")
-                    self.update_task("已登录, 跳过")
-                    raise _AlreadyLoggedIn(nick)
-
-        self.update_progress("终止希沃进程")
+        logger.info("终止希沃进程")
         self.kill_processes()
         self.check_interruption()
 
         self._after_easinote_dead()
 
-        self.update_progress("启动希沃白板")
-        self.start_easinote(path=self.easinote_path, args=config.Login.EasiNote.Args)
+        logger.info("启动希沃白板")
+        self.start_easinote(path=self.easinote_path, args=config.Login.EasiNote.Args)  # type: ignore (prepare中已检验希沃白板路径)
         self.check_interruption()
+
+    def check_logged_in(self) -> bool:
+        """目标账号是否已登录"""
+        return False
+
+    def prepare(self):
+        """准备登录"""
+        self.update_progress("获取希沃白板目录")
+        self.easinote_path = self.get_easinote_path()
+        if self.easinote_path is None:
+            raise LoginError("希沃白板目录不存在", retry=False)
+
+        if config.Login.SkipIfLoggedIn:
+            self.update_progress("检查登录状态")
+            if self.check_logged_in():
+                raise LoginCancelled("该账号已登录")
+
+        self.update_progress("重启希沃进程")
+        self.restart_easinote()
 
         # 等待启动并唤起
         window_title = config.Login.EasiNote.WindowTitle
@@ -244,37 +247,36 @@ class BaseAutomator(QThread, metaclass=QABCMeta):
             try:
                 self.check_interruption()
 
-                self.update_progress("开始登录")
-                self.update_task("重启希沃进程")
-                self.restart_easinote()
+                self.update_task("正在准备登录")
+                self.prepare()
 
                 self.update_task("正在自动登录")
                 self.login()
 
-                self.update_progress("登录完成")
                 self.update_task("完成")
+                self.update_progress("登录完成")
 
                 config.Statistics.LoginSuccessCounts += 1
                 self.successed.emit()
                 break
-            except _AlreadyLoggedIn as e:
-                logger.info(f"登录跳过: {e}")
-                config.Statistics.LoginSuccessCounts += 1
-                self.successed.emit()
-                break
-            except LoginCancelled:
+            except LoginCancelled as e:
                 config.Statistics.LoginInterruptCounts += 1
+                logger.info(f"登录被取消: {e}")
                 self.interrupted.emit()
                 break
             except Exception as e:
-                retries += 1
+                if not getattr(e, "retry", True):
+                    logger.error(f"登录失败 (重试已禁用)\n{type(e).__name__}: {e}")
+                    self.failed.emit(str(e))
+                    break
 
-                if retries <= config.App.MaxRetries:
-                    logger.error(f"登录过程中发生错误\n{type(e).__name__}: {e}")
-                    logger.warning(f"将在2s后重试 (尝试 {retries}/{config.App.MaxRetries}) ")
+                if retries < config.App.MaxRetries:
+                    retries += 1
+                    logger.error(f"登录失败\n{type(e).__name__}: {e}")
+                    logger.warning(f"将在2s后重试 (重试 {retries}/{config.App.MaxRetries}) ")
                     time.sleep(2)
                 else:
-                    logger.critical(f"{retries}次尝试均登录失败\n{type(e).__name__}: {e}")
+                    logger.critical(f"多次尝试均登录失败\n{type(e).__name__}: {e}")
                     capture_handled_exception(
                         e,
                         source="automator",
