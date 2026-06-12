@@ -2,8 +2,8 @@
 
 用法::
 
-    dist-center update-manifest --version 1.2.0 [--is-dev] ...
-    dist-center release --version 1.2.0 [--is-dev] [--build-first] ...
+    dist-center update-manifest --version 1.2.0 ...
+    dist-center release --version 1.2.0 [--build-first] ...
     dist-center pull [--token ...]
     dist-center push --file announcements.json [--token ...]
     dist-center ui                          # 需要 Qt 环境
@@ -15,6 +15,8 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+
+from packaging.version import InvalidVersion, Version
 
 from ._announcement_core import normalize_payload
 from ._release_core import (
@@ -30,6 +32,22 @@ from ._shared import (
     resolve_token,
 )
 
+# ── 辅助函数 ──────────────────────────────────────────────────────────
+
+
+def _resolve_is_dev(version_str: str) -> bool:
+    """基于 PEP 440 自动判断是否为预发布版本。
+
+    预发布（True）：devN, aN, bN, rcN
+    正式版/发布后修订（False）：无后缀, postN, rN
+    """
+    try:
+        v = Version(version_str)
+        return v.is_devrelease or v.is_prerelease
+    except InvalidVersion:
+        return False
+
+
 # ── 命令处理函数 ──────────────────────────────────────────────────────
 
 
@@ -39,10 +57,12 @@ def cmd_update_manifest(args: argparse.Namespace) -> None:
     if token:
         os.environ["RELEASE_PAT"] = token
 
+    is_dev = _resolve_is_dev(args.version) if args.is_dev == "auto" else (args.is_dev == "yes")
+
     update_manifest(
         dist_dir=Path(args.dist_dir),
         version=args.version,
-        is_dev=args.is_dev,
+        is_dev=is_dev,
         confirm_required=args.confirm_required,
         desc=args.desc or None,
         highlights=json.loads(args.highlights),
@@ -89,11 +109,13 @@ def cmd_release(args: argparse.Namespace) -> None:
             print(f"✅ {b_type.upper()} 构建完成")
         print()
 
+    is_dev = _resolve_is_dev(version) if args.is_dev == "auto" else (args.is_dev == "yes")
+
     try:
         msg = do_full_release(
             dist_dir=dist_dir,
             version=version,
-            is_dev=args.is_dev,
+            is_dev=is_dev,
             confirm_required=args.confirm_required,
             desc=args.desc or None,
             highlights=json.loads(args.highlights),
@@ -206,7 +228,13 @@ def build_parser() -> argparse.ArgumentParser:
     # ── update-manifest ──
     p = subparsers.add_parser("update-manifest", help="仅更新远端更新清单 (update.json)")
     p.add_argument("--version", required=True, help="版本号, 如 1.2.0")
-    p.add_argument("--is-dev", action="store_true", help="是否为预发布版本")
+    p.add_argument(
+        "--is-dev",
+        nargs="?",
+        const="yes",
+        default="auto",
+        help="预发布标志: 默认根据版本号自动判断; 传 --is-dev 强制标记为预发布; 传 --is-dev=no 强制标记为正式版",
+    )
     p.add_argument("--confirm-required", action="store_true", help="是否需要用户确认更新")
     p.add_argument("--desc", default="", help="版本描述内容")
     p.add_argument(
@@ -221,7 +249,13 @@ def build_parser() -> argparse.ArgumentParser:
     # ── release (新增：完整发版流程) ──
     p = subparsers.add_parser("release", help="执行完整发版流程（创建 Release、上传资产、更新清单）")
     p.add_argument("--version", default="", help="版本号 (默认自动从 EasiAuto 包读取)")
-    p.add_argument("--is-dev", action="store_true", help="是否为预发布版本")
+    p.add_argument(
+        "--is-dev",
+        nargs="?",
+        const="yes",
+        default="auto",
+        help="预发布标志: 默认根据版本号自动判断; 传 --is-dev 强制标记为预发布; 传 --is-dev=no 强制标记为正式版",
+    )
     p.add_argument("--confirm-required", action="store_true", help="是否需要用户确认更新")
     p.add_argument("--desc", default="", help="版本描述内容")
     p.add_argument("--highlights", default="[]", help="JSON 格式的亮点列表")
@@ -256,6 +290,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(args: list[str] | None = None) -> None:
     """CLI 主入口。"""
+    sys.stdout.reconfigure(encoding="utf-8")
     parser = build_parser()
     ns = parser.parse_args(args)
 

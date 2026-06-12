@@ -19,7 +19,7 @@ description: Use when the user asks to publish a new EasiAuto version, create a 
 
 ## 流程
 
-### 第零步：确保工作树干净且与远端同步
+### Step 0: 确保工作树干净且与远端同步
 
 发版前**必须确保工作树无未提交的更改，且本地与远端同步**。
 
@@ -36,7 +36,7 @@ git log HEAD..origin/$(git branch --show-current) --oneline
 - 远端有新提交 → **告知用户，让用户自行处理**（pull/rebase），不要在发版流程中自动合并
 - 两项检查均通过 → 继续发版
 
-### 第一步：修改版本元数据并提交
+### Step 1: 修改版本元数据并提交
 
 1. 用户输入目标版本号（若未提供，先询问）
 2. 同时修改两个文件中的版本号：
@@ -51,7 +51,7 @@ git commit -m "upgrade: <新版本>"
 git push
 ```
 
-### 第二步：总结更新日志
+### Step 2: 总结更新日志
 
 找到上次发版的 git tag：
 
@@ -73,6 +73,12 @@ git log <上个tag>..HEAD --oneline --no-merges
 git show <commit_hash> --stat         # 先看改动范围和文件列表
 git show <commit_hash> --no-stat      # 深入看具体 diff
 ```
+
+**看完 diff 后，必须进一步阅读改动的完整文件**——diff 只展示片段，完整文件才能理解功能的真实面貌：
+
+- 打开每个改动的源文件，了解完整上下文
+- 重点关注 diff 涉及区域周围的代码：上下游逻辑、UI 布局、条件分支
+- 对于新增文件，必须全文阅读
 
 重点关注：
 
@@ -139,32 +145,10 @@ git show <commit_hash> --no-stat      # 深入看具体 diff
 
 此 JSON 可直接传入发版 CLI
 
-### 第三步：推断元数据
-
-基于版本号自动推断，除非用户明确指定。依据 [PEP 440](https://peps.python.org/pep-0440/) 版本排序规则：
-
-```
-.devN  <  aN  <  bN  <  rcN  <  (正式版)  <  .postN
-```
-
-**预发布（is_dev = true）**：排序在正式版之前，代表不稳定版本。
-
-**正式版 / 发布后修订（is_dev = false）**：排序 ≥ 正式版，代表稳定版本。
-
-| 段类型 | 规范拼写 | 别名 | EasiAuto 示例 | is_dev |
-|--------|---------|------|-------------|--------|
-| 开发版 | `.devN` | — | `1.2.0.dev1` | ✅ true |
-| Alpha | `aN` | `alphaN` | `1.2.0a1` | ✅ true |
-| Beta | `bN` | `betaN` | `1.2.0b1` | ✅ true |
-| RC | `rcN` | `cN`, `preN`, `previewN` | `1.2.0rc1` | ✅ true |
-| 正式版 | (无后缀) | — | `1.2.1` | ❌ false |
-| 发布后修订 | `.postN` | `rN`, `revN` | `1.1.4r1` | ❌ false |
-
-> **注意**：EasiAuto 项目使用的 `r1` 格式 (`1.1.4r1`) 是 post-release（发布后修订），**不是**预发布。它排序在 `1.1.4` 之后，属于稳定版本。
+### Step 3: 推断元数据
 
 | 条件 | confirm_required |
 |------|-----------------|
-| 用户明确指示 | 按用户说的 |
 | 存在破坏性更新（如移除功能、不兼容的 API 变更） | true |
 | 其他情况 | false |
 
@@ -173,21 +157,72 @@ git show <commit_hash> --no-stat      # 深入看具体 diff
 | is_dev = true | 不适用（置为 false） |
 | 正式版，用户未指定 | false（让用户审核时决定） |
 
+
 **推断完成后，明确告知用户每项元数据的值和推断依据。**
 
-### 第四步：用户审核
+### Step 4: 用户审核
 
-将以下内容整理为清晰格式，提交用户审核：
+将审核内容写入一个 Markdown 文件，用外部编辑器打开供用户直接修改。保存并关闭即为审核完成。
 
-1. 目标版本号
-2. 元数据（is_dev、confirm_required、push_to_beta）
-3. 完整的更新日志（说明 + 亮点 + 其他更新）
+1. 将以下内容整理为清晰格式，写入到项目根目录下的 `CHANGELOG_REVIEW.md`：
 
-等待用户确认或修改后再继续。
+   - 目标版本号
+   - 元数据（is_dev、confirm_required、push_to_beta）
+   - 完整的更新日志（说明 + 亮点 + 其他更新）
 
-### 第五步：发布
+   文件模板：
 
-审核通过后，使用 `dist-center release` CLI 命令执行构建并发布 Release
+   ```markdown
+   # EasiAuto 发版审核
+
+   > 请直接修改以下内容。保存并关闭此文件即视为审核通过。
+
+   ## 版本号
+
+   <目标版本号>
+
+   ## 元数据
+
+   - **is_dev**: (default)
+   - **confirm_required**: <true/false>
+   - **push_to_beta**: <true/false>
+
+   ## 更新日志
+
+   ### 说明
+
+   <版本说明，可留空>
+
+   ### 亮点功能
+
+   - **<名称>**：<一句话概括>
+   - ...
+
+   ### 其他更新
+
+   - 新增 ...
+   - 优化 ...
+   - 修复 ...
+   ```
+
+2. **打开编辑器并等待关闭**：
+
+   ```bash
+   code --wait CHANGELOG_REVIEW.md
+   ```
+
+   该命令会**阻塞**直到用户在 VS Code 中关闭该文件标签页。保存后关闭即为审核通过。
+
+   若 `code` 不可用（未安装或不在 PATH），降级为手动确认：改用 `start CHANGELOG_REVIEW.md` 打开文件，然后提示用户**修改并保存文件后，输入"完成"或"审核通过"**继续。
+
+3. 编辑器关闭后，从 `CHANGELOG_REVIEW.md` 中重新解析用户可能修改的内容，作为最终审核结果。
+
+4. 审核完成后，删除 `CHANGELOG_REVIEW.md` 临时文件。
+
+### Step 5: 发布
+
+审核通过后，使用 `dist-center release` CLI 命令执行构建并发布 Release。
+若用户显式指定了 `is_dev`，则加入 `--is_dev` / `--is-dev=no` 控制该版本为预发布。
 
 ```bash
 uv run dist-center release \
