@@ -4,11 +4,14 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from packaging.version import InvalidVersion, Version
+
 from PySide6.QtCore import QDate, Qt, QThread, QTime, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QHBoxLayout,
     QHeaderView,
+    QLabel,
     QPushButton,
     QScrollArea,
     QTableWidgetItem,
@@ -30,6 +33,8 @@ from qfluentwidgets import (
     TimePicker,
     VerticalSeparator,
 )
+
+from EasiAuto import __version__
 
 from ._shared import (
     ANNOUNCEMENT_FILE_PATH,
@@ -73,11 +78,26 @@ def _today_qdt() -> tuple[QDate, QTime]:
     return QDate(now.year, now.month, now.day), QTime(now.hour, now.minute)
 
 
+def _parse_version(value: Any, *, field_name: str) -> str | None:
+    """解析并校验版本号字符串，无效时返回 None。"""
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        return None
+
+    text = value.strip()
+    try:
+        Version(text)
+    except InvalidVersion as e:
+        raise ValueError(f"字段 {field_name} 不是有效版本号: {text}") from e
+
+    return text
+
+
 def normalize_announcement(item: dict[str, Any]) -> dict[str, Any]:
     raw_id = item.get("id", "")
     raw_title = item.get("title", "")
     raw_content = item.get("content", "")
-    raw_published_at = item.get("published_at", "")
 
     if not isinstance(raw_id, str) or not raw_id.strip():
         raise ValueError("字段 id 不能为空")
@@ -95,9 +115,8 @@ def normalize_announcement(item: dict[str, Any]) -> dict[str, Any]:
     )
     end_at = _format_iso(item.get("end_at_date"), item.get("end_at_time")) if item.get("end_at_enabled") else None
 
-    if start_at and end_at:
-        if datetime.fromisoformat(end_at) < datetime.fromisoformat(start_at):
-            raise ValueError("结束时间不能早于开始时间")
+    if start_at and end_at and datetime.fromisoformat(end_at) < datetime.fromisoformat(start_at):
+        raise ValueError("结束时间不能早于开始时间")
 
     published_at = item.get("published_at", "")
     try:
@@ -109,6 +128,9 @@ def normalize_announcement(item: dict[str, Any]) -> dict[str, Any]:
     if link is not None and not isinstance(link, str):
         raise ValueError("字段 link 必须是字符串")
 
+    min_version = _parse_version(item.get("min_version"), field_name="min_version")
+    max_version = _parse_version(item.get("max_version"), field_name="max_version")
+
     return {
         "id": raw_id.strip(),
         "title": raw_title.strip(),
@@ -118,6 +140,8 @@ def normalize_announcement(item: dict[str, Any]) -> dict[str, Any]:
         "end_at": end_at,
         "published_at": published_at,
         "link": link.strip() if isinstance(link, str) else "",
+        "min_version": min_version,
+        "max_version": max_version,
     }
 
 
@@ -317,6 +341,21 @@ class AnnouncementManagerWidget(QWidget):
         self.link_edit.setPlaceholderText("可选，详情链接")
         layout.addWidget(self.link_edit)
 
+        # ── 目标版本范围 ──
+        layout.addWidget(StrongBodyLabel(f"目标版本范围（当前 {__version__}）", container))
+        version_row = QHBoxLayout()
+        version_row.setSpacing(8)
+        self.version_min_edit = LineEdit(container)
+        self.version_min_edit.setPlaceholderText("最低版本，如 1.0.0")
+        self.version_max_edit = LineEdit(container)
+        self.version_max_edit.setPlaceholderText("最高版本（不含），如 2.0.0")
+        version_row.addWidget(QLabel("≥"))
+        version_row.addWidget(self.version_min_edit)
+        version_row.addWidget(QLabel("<"))
+        version_row.addWidget(self.version_max_edit)
+        version_row.addStretch(1)
+        layout.addLayout(version_row)
+
         # ── Start time ──
         layout.addWidget(StrongBodyLabel("开始时间", container))
         self.start_enabled_cb = QCheckBox("启用", container)
@@ -407,7 +446,7 @@ class AnnouncementManagerWidget(QWidget):
 
         self._set_busy(True)
         self.thread = AnnouncementThread(PUSH, token, payload=payload, sha=self.remote_sha)
-        self.thread.finished_signal.connect(lambda r: self._on_push_done(r))
+        self.thread.finished_signal.connect(self._on_push_done)
         self.thread.start()
 
     def _on_push_done(self, result: str):
@@ -444,6 +483,8 @@ class AnnouncementManagerWidget(QWidget):
         self.content_edit.setPlainText(item["content"])
         self.severity_combo.setCurrentText(item["severity"])
         self.link_edit.setText(item["link"] or "")
+        self.version_min_edit.setText(item.get("min_version") or "")
+        self.version_max_edit.setText(item.get("max_version") or "")
 
         # Start time
         start_d, start_t = _parse_iso(item.get("start_at"))
@@ -478,6 +519,8 @@ class AnnouncementManagerWidget(QWidget):
                 "severity": self.severity_combo.currentText(),
                 "published_at": datetime.now().isoformat(),
                 "link": self.link_edit.text(),
+                "min_version": self.version_min_edit.text(),
+                "max_version": self.version_max_edit.text(),
                 "start_at_date": self.start_picker.getDate() if self.start_enabled_cb.isChecked() else None,
                 "start_at_time": self.start_time_picker.getTime() if self.start_enabled_cb.isChecked() else None,
                 "start_at_enabled": self.start_enabled_cb.isChecked(),
@@ -528,6 +571,8 @@ class AnnouncementManagerWidget(QWidget):
         self.content_edit.clear()
         self.severity_combo.setCurrentText("info")
         self.link_edit.clear()
+        self.version_min_edit.clear()
+        self.version_max_edit.clear()
         self.start_enabled_cb.setChecked(False)
         self.end_enabled_cb.setChecked(False)
 

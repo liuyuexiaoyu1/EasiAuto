@@ -7,8 +7,11 @@ from typing import Any, Literal, cast
 
 import requests
 from loguru import logger
+from packaging.version import InvalidVersion, Version
 
 from PySide6.QtCore import QObject, QThread, Signal, Slot
+
+from EasiAuto import __version__
 
 ANNOUNCEMENT_URL = "https://easiauto.0xabcd.dev/announcements.json"
 ANNOUNCEMENT_TIMEOUT = (3, 5)
@@ -34,12 +37,30 @@ class Announcement:
     end_at: datetime | None
     published_at: datetime
     link: str | None
+    min_version: str | None = None
+    max_version: str | None = None
 
     def is_active(self, now: datetime | None = None) -> bool:
+        """检查公告是否对当前客户端生效（时间 + 版本范围）。"""
         now = now or datetime.now(UTC)
         if self.start_at and now < self.start_at:
             return False
-        return not (self.end_at and now > self.end_at)
+        if self.end_at and now > self.end_at:
+            return False
+
+        # 版本范围过滤
+        if self.min_version or self.max_version:
+            try:
+                current = Version(__version__)
+                if self.min_version and current < Version(self.min_version):
+                    return False
+                if self.max_version and current >= Version(self.max_version):
+                    return False
+            except InvalidVersion:
+                logger.warning(f"公告 {self.id} 的版本范围格式无效，跳过版本过滤")
+                return True
+
+        return True
 
 
 class AnnouncementWorker(QObject):
@@ -167,6 +188,9 @@ class AnnouncementService(QObject):
         raw_link = item.get("link")
         link = raw_link.strip() if isinstance(raw_link, str) and raw_link.strip() else None
 
+        min_version = self._parse_version(item.get("min_version"), field_name="min_version")
+        max_version = self._parse_version(item.get("max_version"), field_name="max_version")
+
         return Announcement(
             id=cast(str, raw_id).strip(),
             title=cast(str, raw_title).strip(),
@@ -176,6 +200,8 @@ class AnnouncementService(QObject):
             end_at=end_at,
             published_at=cast(datetime, published_at),
             link=link,
+            min_version=min_version,
+            max_version=max_version,
         )
 
     def _parse_datetime(
@@ -200,6 +226,24 @@ class AnnouncementService(QObject):
             raise AnnouncementParseError(f"字段 {field_name} 不是 ISO 时间") from e
 
         return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
+
+    @staticmethod
+    def _parse_version(value: Any, *, field_name: str) -> str | None:
+        """解析并校验版本号字符串，无效时返回 None。"""
+        if value is None:
+            return None
+
+        if not isinstance(value, str) or not value.strip():
+            return None
+
+        text = value.strip()
+        try:
+            Version(text)
+        except InvalidVersion:
+            logger.warning(f"公告字段 {field_name} 不是有效版本号，将忽略: {text}")
+            return None
+
+        return text
 
     def _cleanup_threads(self) -> None:
         alive: list[QThread] = []
