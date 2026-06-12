@@ -18,7 +18,7 @@ from qfluentwidgets import (
 )
 
 QRCODE_URL = "https://id.seewo.com/scan/qrcode"
-CHECK_URL = "https://id.seewo.com/scan/pcCheckQrCode"
+CHECK_URL = "https://id.seewo.com/scan/pcCheckQrcode"
 QRCODE_TTL = 110
 QR_SIZE = 260
 

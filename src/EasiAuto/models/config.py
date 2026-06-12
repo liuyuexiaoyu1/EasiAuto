@@ -298,7 +298,7 @@ class LoginConfig(ConfigModel):
     SkipIfLoggedIn: bool = Field(
         default=True,
         title="已登录则跳过",
-        description="若当前希沃白板已登录同一账号，则跳过登录",
+        description="若当前希沃白板已登录同一账号，则跳过登录（目前仅对二维码登录生效）",
         json_schema_extra={"icon": "PageRight"},
     )
     KillAgent: bool = Field(

@@ -20,6 +20,7 @@ opencv_minimal_build
 TODO
 .ruff_cache
 .idea/
+.vscode/settings.json
 
 # EasiAuto-generated files
 data
@@ -28,7 +29,7 @@ cache
 config.json
 
 # Claude Code
-.claude
+.claude/settings.local.json
 CLAUDE.md
 
 # C# Injector Extension

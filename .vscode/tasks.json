@@ -2,7 +2,7 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Build: Full (Standard)",
+            "label": "Build: Full",
             "type": "shell",
             "command": "uv",
             "args": [
@@ -16,7 +16,7 @@
             "problemMatcher": []
         },
         {
-            "label": "Build: Lite (No CV)",
+            "label": "Build: Lite",
             "type": "shell",
             "command": "uv",
             "args": [
@@ -30,10 +30,10 @@
             "problemMatcher": []
         },
         {
-            "label": "Build: Release All (Full & Lite)",
+            "label": "Build: All (Full & Lite)",
             "dependsOn": [
-                "Build: Full (Standard)",
-                "Build: Lite (No CV)"
+                "Build: Full",
+                "Build: Lite"
             ],
             "group": {
                 "kind": "build",
