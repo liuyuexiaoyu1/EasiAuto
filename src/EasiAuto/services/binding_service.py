@@ -16,7 +16,7 @@ from EasiAuto.integrations.classisland_manager import (
     classisland_manager as ci_manager,
 )
 from EasiAuto.models.config import config
-from EasiAuto.models.profile import EasiAutomation, profile
+from EasiAuto.models.profile import LoginAutomation, profile
 
 
 class SubjectRef(BaseModel):
@@ -139,8 +139,8 @@ class ClassIslandBindingBackend(BindingSyncBackendBase):
 
     def _resolve_bindings(
         self, binding_map: Mapping[str, str | None], context: SyncContext
-    ) -> list[tuple[CiSubject, EasiAutomation]]:
-        normalized: list[tuple[CiSubject, EasiAutomation]] = []
+    ) -> list[tuple[CiSubject, LoginAutomation]]:
+        normalized: list[tuple[CiSubject, LoginAutomation]] = []
         for subject_id, automation_id in binding_map.items():
             if not subject_id or not automation_id:
                 continue
@@ -153,7 +153,7 @@ class ClassIslandBindingBackend(BindingSyncBackendBase):
 
     def _build_automations(
         self,
-        bindings: list[tuple[CiSubject, EasiAutomation]],
+        bindings: list[tuple[CiSubject, LoginAutomation]],
         context: SyncContext,
     ) -> list[ManagedCiAutomation]:
         """根据目标绑定生成最终自动化列表"""

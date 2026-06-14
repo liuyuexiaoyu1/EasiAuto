@@ -23,25 +23,19 @@ from EasiAuto.consts import IPC_SERVER_NAME
 from EasiAuto.core.automator.manager import automation_manager
 from EasiAuto.core.runtime import ArgvIpcServer, check_singleton, init_exception_handler, send_argv_to_primary
 from EasiAuto.core.utils import (
-    Point,
-    calc_relative_login_window_position,
-    get_scale,
     get_screen_size,
-    get_screen_size_physical,
     init_exit_signal_handlers,
     migrate_desktop_shortcut_icon,
     stop,
 )
 from EasiAuto.models.config import UpdateMode, config
-from EasiAuto.models.profile import BaseAutomation, EasiAutomation, QrCodeAutomation, profile
+from EasiAuto.models.profile import BaseAutomation, profile
 from EasiAuto.services.announcement_service import announcement_service
 from EasiAuto.services.toast_service import ToastNotifier
 from EasiAuto.services.update_service import UpdateError, cleanup_update_cache, update_checker
 from EasiAuto.view.components import (
     DialogResponse,
     PreRunPopup,
-    PrivacyMask,
-    SmallStatusOverlay,
     StatusOverlay,
     StatusOverlayBase,
     WarningBanner,
@@ -103,7 +97,6 @@ class Launcher:
         self.main_window: MainWindow | None = None
         self.banner: WarningBanner | None = None
         self.status_overlay: StatusOverlayBase | None = None
-        self.privacy_mask: PrivacyMask | None = None
 
         self.login_running: bool = False
         self.stop_requested: bool = False
@@ -115,8 +108,6 @@ class Launcher:
         self._post_login_update_thread: PostLoginUpdateThread | None = None
         automation_manager.finished.connect(self._on_login_finished)
         automation_manager.failed.connect(self._on_login_failed)
-        automation_manager.privacy_mask_show.connect(self._on_privacy_mask_show)
-        automation_manager.privacy_mask_hide.connect(self._on_privacy_mask_hide)
 
     def _show_settings_window(self) -> None:
         if self.main_window is None:
@@ -168,7 +159,6 @@ class Launcher:
 
         # 关闭覆盖窗口
         self.banner = self._safe_cleanup_widget(self.banner)
-        self.privacy_mask = self._safe_cleanup_widget(self.privacy_mask)
 
         # 发送失败通知
         if error_message:
@@ -220,17 +210,6 @@ class Launcher:
                 widget.close()
             widget.deleteLater()
 
-    def _on_privacy_mask_show(self, x: int, y: int, w: int, h: int) -> None:
-        """显示隐私保护遮罩（输入均为绝对坐标）"""
-        scale = get_scale()
-        if self.privacy_mask is None:
-            self.privacy_mask = PrivacyMask()
-        # 由于 Qt 自带缩放，所以要将缩放重新转换为 100%
-        self.privacy_mask.setGeometry(int(x / scale), int(y / scale), int(w / scale), int(h / scale))
-        self.privacy_mask.show()
-
-    def _on_privacy_mask_hide(self):
-        self.privacy_mask = self._safe_cleanup_widget(self.privacy_mask)
 
     def _on_stop_automation(self) -> None:
         automation_manager.stop()
@@ -246,26 +225,21 @@ class Launcher:
                 logger.warning(f"档案 {args.id} 已被禁用")
                 return None
 
-            match auto:
-                case EasiAutomation():
-                    if auto.account == "":
-                        logger.error(f"档案 {args.id} 的账号为空")
-                        return None
-                    if auto.password == "":
-                        logger.error(f"档案 {args.id} 的密码为空")
-                        return None
-                    return auto.type, (auto.account, auto.password)
-                case QrCodeAutomation():
-                    return auto.type, {
-                        "token": auto.token,
-                        "userId": auto.user_id or "",
-                        "nickName": auto.nick_name or "",
-                        "phone": auto.phone or "",
-                    }
-            return None
+            return auto.type, {
+                "token": auto.token,
+                "userId": auto.user_id or "",
+                "nickName": auto.nick_name or "",
+                "phone": auto.phone or "",
+            }
 
         if args.account and args.password:
-            return "password", (args.account, args.password)
+            from EasiAuto.core.automator.qrcode import fetch_password_token
+
+            token_data = fetch_password_token(args.account, args.password)
+            if not token_data:
+                logger.error("通过命令行参数获取 token 失败")
+                return None
+            return "qrcode", token_data
 
         logger.error("参数错误: 使用 --account 时必须同时提供 --password")
         return None
@@ -357,22 +331,7 @@ class Launcher:
         # 显示状态浮窗
         if config.StatusOverlay.Enabled:
             try:
-                try:
-                    # 根据屏幕高度和登录窗口位置选择状态浮窗的大小
-                    screen_height = get_screen_size_physical()[1]
-                    expected_pos = Point(config.Login.Position.AgreementCheckbox)
-                    expected_pos.y += 8
-                    login_window_buttom = calc_relative_login_window_position(
-                        expected_pos,
-                        window_size=config.Login.Position.LoginWindowSize,
-                        base_size=config.Login.Position.BaseSize,
-                    ).y
-                    available_space = screen_height - (login_window_buttom + 8)
-                except Exception as e:
-                    logger.warning(f"计算状态浮窗位置时出错: {e}")
-                    available_space = 0
-
-                self.status_overlay = StatusOverlay() if available_space > 300 else SmallStatusOverlay()
+                self.status_overlay = StatusOverlay()
                 self.status_overlay.stop_clicked.connect(self._on_stop_automation)
                 automation_manager.started.connect(self.status_overlay.show)
                 automation_manager.successed.connect(self.status_overlay.on_success)
@@ -384,7 +343,6 @@ class Launcher:
                 logger.error(f"设置状态浮窗时出错, 跳过状态浮窗: {e}")
 
         # 开始登录任务
-        logger.debug(f"当前设置的登录方案: {config.Login.Method}")
         self._current_login_triggered_via_ipc = from_ipc
 
         automation_manager.run(type, credentials)

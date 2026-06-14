@@ -21,7 +21,7 @@ from qfluentwidgets import (
     VerticalSeparator,
 )
 
-from EasiAuto.models.profile import BaseAutomation, EasiAutomation, QrCodeAutomation, profile
+from EasiAuto.models.profile import BaseAutomation, LoginAutomation, profile
 from EasiAuto.services.binding_service import ClassIslandBindingBackend, SubjectRef
 from EasiAuto.view.helpers import get_main_container
 
@@ -161,15 +161,13 @@ class ProfileCard(CardWidget):
             display_name = f"{display_name} (已禁用)"
         self.name_label.setText(display_name)
 
-        if isinstance(auto, EasiAutomation):
-            detail_text = auto.account_name or auto.account or ""
-        elif isinstance(auto, QrCodeAutomation):
-            detail_text = "二维码档案"
+        if isinstance(auto, LoginAutomation):
+            detail_text = auto.detail_name or ""
         else:
             detail_text = ""
         self.detail_label.setText(detail_text)
 
-        if isinstance(auto, QrCodeAutomation) and auto.avatar:
+        if isinstance(auto, LoginAutomation) and auto.avatar:
             try:
                 self.avatar_label.setImage(str(auto.avatar))
             except Exception:
@@ -294,10 +292,8 @@ class BindingPage(QWidget):
 
     @staticmethod
     def _profile_account_name(automation: BaseAutomation) -> str:
-        if isinstance(automation, EasiAutomation):
-            return automation.account_name or automation.account or ""
-        if isinstance(automation, QrCodeAutomation):
-            return automation.nick_name or automation.user_id or ""
+        if isinstance(automation, LoginAutomation):
+            return automation.nick_name or automation.account or automation.user_id or ""
         return ""
 
     def _subject_status_text(self, row: _SubjectRow) -> str:

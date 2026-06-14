@@ -90,67 +90,17 @@ class BaseAutomation(BaseModel, ABC):
         return text
 
 
-class EasiAutomation(BaseAutomation):
-    """账密登录档案"""
-
-    type: Literal["password"] = Field(default="password")
-
-    account: str = Field(default="", description="账号")
-    password: str = Field(default="", description="密码")
-    account_name: str | None = Field(default=None, description="希沃白板用户名")
-    avatar: Any | None = Field(default=None, description="希沃白板头像")
-
-    @model_serializer(mode="wrap")
-    def check_on_dump(self, serializer):
-        if not self.account.strip():
-            raise ValueError("账号不能为空")
-        if not self.password.strip():
-            raise ValueError("密码不能为空")
-        return serializer(self)
-
-    @property
-    def display_name(self) -> str | None:
-        return self.name or self.account_name
-
-    @property
-    def detail_name(self) -> str | None:
-        return self.account or None
-
-    @property
-    def automation_name(self) -> str:
-        return f"{EA_PREFIX} {config.ClassIsland.DefaultDisplayName}" + (f" - {self.name}" if self.name else "")
-
-    @property
-    def export_name(self) -> str:
-        label = self.name or self.account
-        return f"希沃自动登录（{label}）"
-
-    @field_serializer("password", mode="plain")
-    def _ser_password(self, value: str, _info: SerializationInfo) -> str:
-        if _info.context and _info.context.get("encryption_enabled"):
-            return encrypt_secret(value)
-        return value
-
-    @field_validator("password", mode="after")
-    @classmethod
-    def _deser_password(cls, value: str) -> str:
-        try:
-            return decrypt_secret(value)
-        except Exception as e:
-            logger.error(f"解密密码失败: {e}")
-            return ""
-
-
-class QrCodeAutomation(BaseAutomation):
-    """二维码登录档案"""
+class LoginAutomation(BaseAutomation):
+    """登录档案（二维码 / 密码）"""
 
     type: Literal["qrcode"] = Field(default="qrcode")
 
-    token: str = Field(default="", description="二维码登录令牌")
+    token: str = Field(default="", description="登录令牌")
     user_id: str | None = Field(default=None, description="希沃用户 ID")
     nick_name: str | None = Field(default=None, description="希沃用户昵称")
     phone: str | None = Field(default=None, description="希沃用户手机号")
     avatar: Any | None = Field(default=None, description="希沃用户头像")
+    account: str | None = Field(default=None, description="账号（仅密码档案，用于编辑时参考）")
 
     @model_serializer(mode="wrap")
     def check_on_dump(self, serializer):
@@ -160,16 +110,20 @@ class QrCodeAutomation(BaseAutomation):
 
     @property
     def display_name(self) -> str | None:
-        return self.name or self.nick_name
+        return self.name or self.nick_name or self.account
 
     @property
     def detail_name(self) -> str | None:
-        return "二维码档案"
+        return self.account or "二维码档案"
 
     @property
     def export_name(self) -> str:
-        label = self.name or self.nick_name or self.user_id or "未命名"
+        label = self.name or self.nick_name or self.user_id or self.account or "未命名"
         return f"希沃自动登录（{label}）"
+
+    @property
+    def is_qrcode_profile(self) -> bool:
+        return not self.account
 
     @field_serializer("token")
     def _ser_token(self, value: str, _info: SerializationInfo) -> str:
@@ -188,7 +142,7 @@ class QrCodeAutomation(BaseAutomation):
 
 
 Automation = Annotated[
-    EasiAutomation | QrCodeAutomation,
+    LoginAutomation,
     Field(discriminator="type"),
 ]
 
@@ -234,22 +188,31 @@ class Profile(BaseModel):
 
         try:
             raw = cls._load_raw_payload(path)
-            schema_version = raw.get("schema_version", -1)
-            if not isinstance(schema_version, int) or schema_version < 2:
+            sv = raw.get("schema_version", -1)
+            if not isinstance(sv, int) or sv < 2:
                 logger.warning("强制重建档案")
                 rebuilt = cls()
                 rebuilt.save()
                 return rebuilt
-            if schema_version < 3:
+            if sv < 3:
                 logger.warning("从 v2 档案升级到 v3")
                 for i, _ in enumerate(raw["automations"]):
                     raw["automations"][i]["type"] = "password"
                     raw["automations"][i]["password"] = raw["automations"][i]["password"].replace("ea2$", "ea$", 1)
                 raw["schema_version"] = 3
 
-                upgraded = cls(**raw)
-                upgraded.save()
-                return upgraded
+            # 迁移 EasiAutomation (type=password) → LoginAutomation (type=qrcode)
+            for item in raw.get("automations", []):
+                if item.get("type") == "password":
+                    item["type"] = "qrcode"
+                    item.pop("password", None)
+                    # account 保留用于编辑参考，token 可能为空（旧档案）
+                    if "account_name" in item:
+                        item["nick_name"] = item.pop("account_name")
+                    if "token" not in item:
+                        item["token"] = ""
+            raw["schema_version"] = max(sv, _PROFILE_SCHEMA_VERSION)
+
             return cls(**raw)
 
         except Exception as e:

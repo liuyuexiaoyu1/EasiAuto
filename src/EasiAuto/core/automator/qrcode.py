@@ -7,6 +7,8 @@ import subprocess
 import time
 from pathlib import Path
 
+import requests
+
 import psutil
 from loguru import logger
 
@@ -202,3 +204,40 @@ class QRCodeAutomator(BaseAutomator):
                 time.sleep(1)
 
         raise LoginError(f"命名管道 {PIPE_NAME} 在 {max_retries} 次尝试内未能就绪")
+
+
+def fetch_password_token(username: str, password: str) -> dict | None:
+    """用账号密码请求 token API，返回 token + user 信息或 None"""
+    import hashlib
+
+    pw_md5 = hashlib.md5(password.encode()).hexdigest()
+
+    try:
+        resp = requests.post(
+            "http://edu.seewo.com/api/v1/auth/login",
+            json={"username": username, "password": pw_md5},
+            headers={
+                "Cookie": "x-auth-app=EasiNote",
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            },
+            timeout=15,
+        )
+        data = resp.json()
+        if data.get("error_code") != 0:
+            logger.warning(f"Token 获取失败: {data.get('message', '未知错误')}")
+            return None
+
+        inner = data.get("data", {})
+        user = inner.get("user", {})
+        return {
+            "token": inner.get("token", ""),
+            "userId": user.get("uid", ""),
+            "nickName": user.get("nickName", ""),
+            "phone": user.get("phone", ""),
+            "photoUrl": user.get("photoUrl", ""),
+            "accountName": user.get("username", ""),
+        }
+    except Exception as e:
+        logger.error(f"Token 请求异常: {e}")
+        return None

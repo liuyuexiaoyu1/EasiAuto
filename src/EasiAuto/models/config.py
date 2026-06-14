@@ -23,7 +23,7 @@ from pydantic.fields import FieldInfo
 from PySide6.QtGui import QColor
 
 from EasiAuto import __version__
-from EasiAuto.consts import CONFIG_PATH, IS_FULL
+from EasiAuto.consts import CONFIG_PATH
 
 
 @total_ordering
@@ -49,13 +49,6 @@ class LogLevelEnum(InformativeEnum):
     CRITICAL = (50, "灾难")
 
 
-class LoginMethod(InformativeEnum):
-    FIXED = (0, "固定位置（较稳定，极快）")
-    CV = (1, "图像识别（不稳定，较快）")
-    UIA = (2, "自动定位（最稳定，较慢）")
-    INJECT = (3, "进程注入（不稳定，最快）")
-
-
 class ThemeOptions(InformativeEnum):
     AUTO = ("Auto", "跟随系统")
     LIGHT = ("Light", "浅色")
@@ -72,11 +65,6 @@ class UpdateMode(InformativeEnum):
 class UpdateChannal(InformativeEnum):
     RELEASE = ("release", "稳定通道")
     DEV = ("dev", "测试通道")
-
-
-class PackageChannel(InformativeEnum):
-    DEFAULT = ("default", "完整版")
-    LITE = ("lite", "精简版")
 
 
 class DownloadSource(InformativeEnum):
@@ -233,62 +221,7 @@ class TimeoutConfig(ConfigModel):
     )
 
 
-class PositionConfig(ConfigModel):
-    """FixedAutomator 使用的位置坐标"""
-
-    EnableScaling: bool = Field(
-        default=True,
-        title="启用智能缩放",
-        description="根据系统分辨率和缩放自动调整坐标。若启用，设置的坐标必须基于 1920x1080 100% 缩放",
-    )
-    EnterLogin: tuple[int, int] = Field(
-        default=(172, 1044),
-        title="进入登录界面按钮",
-    )
-    AccountLoginTab: tuple[int, int] = Field(
-        default=(1090, 350),
-        title="切换到“账号登录”标签页的按钮",
-    )
-    AccountInput: tuple[int, int] = Field(
-        default=(1000, 420),
-        title="账号输入框",
-    )
-    PasswordInput: tuple[int, int] = Field(
-        default=(1000, 490),
-        title="密码输入框",
-    )
-    AgreementCheckbox: tuple[int, int] = Field(
-        default=(935, 724),
-        title="同意协议复选框",
-    )
-    LoginButton: tuple[int, int] = Field(
-        default=(1090, 560),
-        title="登录按钮",
-    )
-    BaseSize: tuple[int, int] = Field(
-        default=(1920, 1080),
-        title="基准分辨率",
-        json_schema_extra={"hidden": True},
-    )
-    LoginWindowSize: tuple[int, int] = Field(
-        default=(808, 582),
-        title="登录界面窗口大小",
-        json_schema_extra={"hidden": True},
-    )
-
-
 class LoginConfig(ConfigModel):
-    Method: LoginMethod = Field(
-        default=LoginMethod.FIXED,
-        title="登录方式",
-        description="""选择用于进行自动登录的方式：
- - 固定位置大部分情况下开箱即用，仅在特殊情况需手动设置坐标；
- - 自动定位基于 UI Automation 直接获取页面元素，在部分机器上可能极慢
- - 图像识别仅支持常规分辨率与缩放，使用 OpenCV 可一定程度提高识别率
- - 进程注入通过 Snoop 注入希沃白板直接调用登录，理论上最快，
-   但是稳定性未知，属于实验性选项""",
-        json_schema_extra={"icon": "Application"},
-    )
     SkipOnce: bool = Field(
         default=False,
         title="跳过一次",
@@ -298,32 +231,8 @@ class LoginConfig(ConfigModel):
     SkipIfLoggedIn: bool = Field(
         default=True,
         title="已登录则跳过",
-        description="若当前希沃白板已登录同一账号，则跳过登录（目前仅对二维码登录生效）",
+        description="若当前希沃白板已登录同一账号，则跳过登录",
         json_schema_extra={"icon": "PageRight"},
-    )
-    KillAgent: bool = Field(
-        default=False,
-        title="终止 EasiAgent 服务",
-        description="可避免某些情况下自动登录被希沃白板的快捷登录打断",
-        json_schema_extra={"icon": "PowerButton"},
-    )
-    IsIwb: bool = Field(
-        default=True,
-        title="需要进入登录界面",
-        description="适用于打开希沃白板后直接进入黑板界面（iwb）的情况，在非希沃机器上需要关闭",
-        json_schema_extra={"icon": "People"},
-    )
-    Is4K: bool = Field(
-        default=False,
-        title="图像识别 4K 适配",
-        description="在图像识别登录方式下，启用对 3840x2160 200% 缩放的支持",
-        json_schema_extra={"icon": "FitPage"},
-    )
-    ForceEnableScaling: bool = Field(
-        default=False,
-        title="强制启用兼容模式输入",
-        description="强制使用复制粘贴进行输入，对自动定位不起作用。不要调整此选项，除非你知道自己在做什么",
-        json_schema_extra={"icon": "Asterisk"},
     )
 
     EasiNote: EasiNoteConfig = Field(
@@ -338,14 +247,6 @@ class LoginConfig(ConfigModel):
         description="配置自动登录过程中的等待时长（秒）",
         json_schema_extra={"icon": "StopWatch"},
     )
-    Position: PositionConfig = Field(
-        default_factory=PositionConfig,
-        title="位置坐标",
-        description="配置固定位置登录方式下的各个按钮和输入框的位置坐标\n默认值已配置为 1920x1080 100% 缩放下的坐标",
-        json_schema_extra={"icon": "Move"},
-    )
-
-
 class WarningConfig(ConfigModel):
     Enabled: bool = Field(
         default=True,
@@ -491,31 +392,6 @@ class AppConfig(ConfigModel):
     )
 
 
-class PrivacyMaskConfig(ConfigModel):
-    Enable: bool = Field(
-        default=True,
-        title="启用隐私保护遮罩",
-        description="登录时，在输入框上显示一个遮罩，用于遮挡可能的隐私信息。仅在固定位置与自动定位中可用\n下方选项用于控制固定位置下的显示，部分选项继承自位置坐标",
-    )
-    MaskLeftTop: tuple[int, int] = Field(
-        default=(868, 381),
-        title="遮罩位置",
-        description="即左上角的坐标",
-    )
-    MaskSize: tuple[int, int] = Field(
-        default=(440, 386),
-        title="遮罩大小",
-    )
-
-
-class ExperimentalConfig(ConfigModel):
-    PrivacyMask: PrivacyMaskConfig = Field(
-        default_factory=PrivacyMaskConfig,
-        title="隐私保护遮罩",
-        json_schema_extra={"icon": "VPN"},
-    )
-
-
 class ClassIslandConfig(ConfigModel):
     AutoPath: bool = Field(
         default=True,
@@ -558,12 +434,6 @@ class UpdateConfig(ConfigModel):
         default=UpdateChannal.RELEASE,
         title="更新通道",
         description="设置应用的更新目标版本（测试通道可能含有不稳定的功能，谨慎使用）",
-        json_schema_extra={"icon": "Tag"},
-    )
-    TargetPackageChannel: PackageChannel = Field(
-        default=PackageChannel.DEFAULT if IS_FULL else PackageChannel.LITE,
-        title="更新包分支",
-        description="设置应用的更新包分支",
         json_schema_extra={"icon": "Tag"},
     )
     TargetDownloadSource: DownloadSource = Field(
@@ -643,7 +513,6 @@ class Config(ConfigModel):
     Banner: BannerConfig = Field(default_factory=BannerConfig, title="警示横幅")
     StatusOverlay: StatusOverlayConfig = Field(default_factory=StatusOverlayConfig, title="状态浮窗")
     App: AppConfig = Field(default_factory=AppConfig, title="应用设置")
-    Experimental: ExperimentalConfig = Field(default_factory=ExperimentalConfig, title="实验性选项")
 
     # AutomationPage
     ClassIsland: ClassIslandConfig = Field(default_factory=ClassIslandConfig, title="ClassIsland 设置")

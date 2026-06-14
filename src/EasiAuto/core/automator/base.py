@@ -17,6 +17,10 @@ from EasiAuto.core.utils import Point, QABCMeta, get_scale, get_screen_size_phys
 from EasiAuto.models.config import config
 
 
+class AlreadyLoggedIn(Exception):
+    """目标账号已登录，无需重复登录"""
+
+
 class LoginCancelled(Exception):  # noqa: N818
     """登录被手动取消"""
 
@@ -40,9 +44,6 @@ class BaseAutomator(QThread, metaclass=QABCMeta):
     failed = Signal(str)
     task_updated = Signal(str)
     progress_updated = Signal(str)
-    # NOTE: 无法在子线程创建 UI，需要将信号传回主线程
-    privacy_mask_show = Signal(int, int, int, int)  # x, y, width, height
-    privacy_mask_hide = Signal()
 
     def __init__(self, account: str, password: str) -> None:
         super().__init__()
@@ -101,8 +102,6 @@ class BaseAutomator(QThread, metaclass=QABCMeta):
 
     def kill_processes(self):
         target_list: list[str] = [config.Login.EasiNote.ProcessName]
-        if config.Login.KillAgent:
-            target_list.append("EasiAgent")
         if extra := config.Login.EasiNote.ExtraKills:
             target_list += extra.split(",")
         logger.debug(f"要终止的目标进程: {', '.join(target_list)}")
@@ -197,6 +196,18 @@ class BaseAutomator(QThread, metaclass=QABCMeta):
         """目标账号是否已登录"""
         return False
 
+    def _is_easinote_running(self) -> bool:
+        """检查希沃白板是否已在运行"""
+        try:
+            import psutil
+            pname = config.Login.EasiNote.ProcessName
+            for proc in psutil.process_iter(["name"]):
+                if proc.info["name"] and pname.lower() in proc.info["name"].lower():
+                    return True
+        except Exception:
+            pass
+        return False
+
     def prepare(self):
         """准备登录"""
         self.update_progress("获取希沃白板目录")
@@ -207,7 +218,12 @@ class BaseAutomator(QThread, metaclass=QABCMeta):
         if config.Login.SkipIfLoggedIn:
             self.update_progress("检查登录状态")
             if self.check_logged_in():
-                raise LoginCancelled("该账号已登录")
+                raise AlreadyLoggedIn
+
+        if self._is_easinote_running():
+            logger.info("希沃白板已在运行，跳过重启")
+            self.update_progress("希沃白板已运行")
+            return
 
         self.update_progress("重启希沃进程")
         self.restart_easinote()
@@ -258,6 +274,12 @@ class BaseAutomator(QThread, metaclass=QABCMeta):
 
                 config.Statistics.LoginSuccessCounts += 1
                 self.successed.emit()
+                break
+            except AlreadyLoggedIn:
+                config.Statistics.LoginSuccessCounts += 1
+                self.successed.emit()
+                self.update_task("此账号已登录")
+                self.update_progress("此账号已登录，无需重复登录")
                 break
             except LoginCancelled as e:
                 config.Statistics.LoginInterruptCounts += 1

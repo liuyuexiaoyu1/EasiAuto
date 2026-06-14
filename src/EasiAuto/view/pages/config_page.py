@@ -23,9 +23,8 @@ from qfluentwidgets import (
     setTheme,
 )
 
-from EasiAuto.consts import IS_FULL
 from EasiAuto.core import utils
-from EasiAuto.models.config import ConfigGroup, LoginMethod, config
+from EasiAuto.models.config import ConfigGroup, config
 from EasiAuto.services.announcement_service import Announcement, announcement_service
 from EasiAuto.view.components import AnnouncementCard, SettingCard
 from EasiAuto.view.components.qfw_widgets import SettingCardGroup
@@ -192,14 +191,6 @@ class ConfigPage(QWidget):
         # 额外属性
         for name, card in SettingCard.index.items():
             match name:
-                case "Login.Method":
-                    card = cast(SettingCard, card)
-                    card.widget.setMinimumWidth(200)
-                    if not IS_FULL:  # LITE 版，禁用进程注入登录
-                        fixed_index = card.widget.findData(LoginMethod.INJECT)  # type: ignore
-                        if fixed_index != -1:
-                            card.widget.setItemEnabled(fixed_index, False)  # type: ignore
-
                 case "Login.SkipOnce":
                     card = cast(SettingCard, card)
                     button_card = TransparentPushButton(icon=FluentIcon.SHARE, text="创建快捷方式")
@@ -231,14 +222,6 @@ class ConfigPage(QWidget):
                     card = cast(SettingCard, card)
                     card.widget.setMinimumWidth(160)
 
-                case "Login.Position":
-                    card = cast(ExpandGroupSettingCard, card)
-                    recoard_card = PushSettingCard(
-                        icon=FluentIcon.CAMERA, title="录制模式", content="进入录制模式获取坐标", text="不可用"
-                    )
-                    recoard_card.setEnabled(False)  # TODO: 录制模式
-                    card.addGroupWidget(recoard_card)
-                    self.add_resetter(card, "Login.Position", "位置坐标")
                 case "Banner.Style":
                     card = cast(ExpandGroupSettingCard, card)
                     self.add_resetter(card, "Banner.Style", "横幅样式")

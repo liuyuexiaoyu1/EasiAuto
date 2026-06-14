@@ -16,7 +16,7 @@ from PySide6.QtCore import QObject, Signal
 
 from EasiAuto.consts import EA_EXECUTABLE, EA_PREFIX
 from EasiAuto.core.utils import kill_process
-from EasiAuto.models.profile import EasiAutomation, profile
+from EasiAuto.models.profile import LoginAutomation, profile
 
 
 class CiSubject(BaseModel):
@@ -268,14 +268,13 @@ class ClassIslandManager:
         failed_count: int = 0
         for auto in pending_imports:
             try:
-                # _resolve_automations 已确保 account 和 password 不为空
                 account = cast(str, auto.account)
                 password = cast(str, auto.password)
 
-                new_auto = EasiAutomation(
+                new_auto = LoginAutomation(
                     account=account,
-                    password=password,
                     name=auto.get_name(),
+                    token="",
                 )
                 profile.upsert_automation(new_auto)
                 auto.args = f"--id {new_auto.id}"

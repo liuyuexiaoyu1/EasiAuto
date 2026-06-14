@@ -4,8 +4,7 @@ from loguru import logger
 
 from PySide6.QtCore import QObject, Signal
 
-from EasiAuto.core.automator import BaseAutomator, CVAutomator, FixedAutomator, InjectAutomator, UIAAutomator
-from EasiAuto.models.config import LoginMethod, config
+from EasiAuto.core.automator import BaseAutomator
 
 
 class AutomationManager(QObject):
@@ -16,36 +15,32 @@ class AutomationManager(QObject):
     failed = Signal(str)
     task_updated = Signal(str)
     progress_updated = Signal(str)
-    privacy_mask_show = Signal(int, int, int, int)  # x, y, width, height
-    privacy_mask_hide = Signal()
 
     def __init__(self):
         super().__init__()
         self._automator: BaseAutomator | None = None
-
-    def _get_strategy_class(self, strategy: LoginMethod) -> type[BaseAutomator]:
-        strategies: dict[LoginMethod, type[BaseAutomator]] = {
-            LoginMethod.FIXED: FixedAutomator,
-            LoginMethod.CV: CVAutomator,
-            LoginMethod.UIA: UIAAutomator,
-            LoginMethod.INJECT: InjectAutomator,
-        }
-        return strategies.get(strategy, FixedAutomator)
 
     def run(self, type: str, credentials: Any):
         if self._automator and self._automator.isRunning():
             logger.warning("已有一个正在运行的登录任务")
             return
 
-        if type == "qrcode":
-            # TODO: 考虑将工具函数提取至独立文件
-            from EasiAuto.core.automator.qrcode import QRCodeAutomator
+        from EasiAuto.core.automator.qrcode import QRCodeAutomator, fetch_password_token
 
+        if type == "qrcode":
             logger.info("检测到二维码档案")
-            self._automator = QRCodeAutomator(credentials)
+            token_data = credentials
         else:
-            strategy_class = self._get_strategy_class(config.Login.Method)
-            self._automator = strategy_class(*credentials)
+            account, password = credentials
+            logger.info(f"密码档案, 请求 token: {account}")
+            token_data = fetch_password_token(account, password)
+            if not token_data:
+                from EasiAuto.core.automator.base import LoginError
+
+                self.failed.emit("Token 获取失败，请检查账号密码是否正确")
+                return
+
+        self._automator = QRCodeAutomator(token_data)
 
         self._automator.started.connect(self.started)
         self._automator.finished.connect(self.finished)
@@ -54,8 +49,6 @@ class AutomationManager(QObject):
         self._automator.failed.connect(self.failed)
         self._automator.task_updated.connect(self.task_updated)
         self._automator.progress_updated.connect(self.progress_updated)
-        self._automator.privacy_mask_show.connect(self.privacy_mask_show)
-        self._automator.privacy_mask_hide.connect(self.privacy_mask_hide)
 
         self._automator.start()
 

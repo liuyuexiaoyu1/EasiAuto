@@ -36,10 +36,9 @@ from qfluentwidgets import (
     VerticalSeparator,
 )
 
-from EasiAuto.consts import IS_FULL
 from EasiAuto.core.utils import create_shortcut
 from EasiAuto.integrations.classisland_manager import classisland_manager as ci_manager
-from EasiAuto.models.profile import BaseAutomation, EasiAutomation, ProfileChangeReason, QrCodeAutomation, profile
+from EasiAuto.models.profile import BaseAutomation, ProfileChangeReason, LoginAutomation, profile
 from EasiAuto.services.binding_service import ClassIslandBindingBackend
 from EasiAuto.view.components import SettingCard
 from EasiAuto.view.components.qfw_widgets import ListWidget, PillOverflowBar, PillPushButton
@@ -296,10 +295,8 @@ class ProfileManagePage(QWidget):
         self.action_bar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.action_bar.addAction(Action(FluentIcon.ADD, "添加", triggered=self._add_automation))
         self.action_import_current = Action(FluentIcon.LINK, "导入当前账户", triggered=self._on_import_current)
-        self.action_import_current.setEnabled(IS_FULL)
         self.action_bar.addAction(self.action_import_current)
         self.action_qrcode_add = Action(FluentIcon.QRCODE, "扫码添加", triggered=self._on_qrcode_add)
-        self.action_qrcode_add.setEnabled(IS_FULL)
         self.action_bar.addAction(self.action_qrcode_add)
         self.action_bar.addAction(Action(FluentIcon.SYNC, "刷新", triggered=self._init_selector))
 
@@ -370,7 +367,7 @@ class ProfileManagePage(QWidget):
         """比对缓存头像与网络头像，仅更新有变化的"""
         changed = False
         for auto in profile.list_automation():
-            if not isinstance(auto, QrCodeAutomation) or not auto.token or not auto.user_id:
+            if not isinstance(auto, LoginAutomation) or not auto.token or not auto.user_id:
                 continue
 
             avatar_url = fetch_qrcode_avatar(auto.token)
@@ -444,16 +441,16 @@ class ProfileManagePage(QWidget):
 
     def _add_automation(self):
         self.is_new_automation = True
-        self.current_automation = EasiAutomation(account="", password="")
+        self.current_automation = LoginAutomation(token="")
         self.current_list_item = None
         self.auto_list.clearSelection()
         self._update_editor(self.current_automation)
         self.editor_widget.setEnabled(True)
 
     @staticmethod
-    def _find_existing_qrcode(user_id: str) -> QrCodeAutomation | None:
+    def _find_existing_qrcode(user_id: str) -> LoginAutomation | None:
         for item in profile.list_automation():
-            if isinstance(item, QrCodeAutomation) and item.user_id == user_id:
+            if isinstance(item, LoginAutomation) and item.user_id == user_id:
                 return item
         return None
 
@@ -502,7 +499,7 @@ class ProfileManagePage(QWidget):
             if avatar_url:
                 avatar_path = self._cache_qrcode_avatar(user_id, avatar_url)
 
-        automation = QrCodeAutomation(
+        automation = LoginAutomation(
             name=nick_name,
             token=token,
             user_id=user_id,
@@ -566,7 +563,7 @@ class ProfileManagePage(QWidget):
             if avatar_url:
                 avatar_path = self._cache_qrcode_avatar(user_id, avatar_url)
 
-        automation = QrCodeAutomation(
+        automation = LoginAutomation(
             name=nick_name,
             token=token,
             user_id=user_id,
@@ -608,21 +605,17 @@ class ProfileManagePage(QWidget):
         self.automation_name_label.setText(self._display_name(automation))
 
         self.name_edit.setText(automation.name or "")
-        match automation:
-            case EasiAutomation():
-                self.account_edit.setText(automation.account)
-                self.password_edit.setText(automation.password)
-                self.account_name_edit.setText(automation.account_name or "")
-                self.account_edit.setDisabled(False)
-                self.password_edit.setDisabled(False)
-                self.account_name_edit.setDisabled(True)
-            case QrCodeAutomation():
-                self.account_edit.setText("")
-                self.password_edit.setText("")
-                self.account_name_edit.setText("")
-                self.account_edit.setDisabled(True)
-                self.password_edit.setDisabled(True)
-                self.account_name_edit.setDisabled(True)
+        if isinstance(automation, LoginAutomation):
+            is_new = self.is_new_automation
+            has_account = bool(automation.account)
+            self.account_edit.setText(automation.account or "")
+            self.password_edit.setText("")
+            self.account_name_edit.setText(automation.nick_name or "")
+            # 新建或已有账号的档案允许编辑
+            editable = is_new or has_account
+            self.account_edit.setDisabled(not editable)
+            self.password_edit.setDisabled(not editable)
+            self.account_name_edit.setDisabled(not editable)
 
         self.editor_widget.setEnabled(True)
 
@@ -644,29 +637,42 @@ class ProfileManagePage(QWidget):
 
         self.current_automation.name = self.name_edit.text().strip() or None
 
-        if isinstance(self.current_automation, EasiAutomation):
+        if isinstance(self.current_automation, LoginAutomation):
             account = self.account_edit.text().strip()
             password = self.password_edit.text()
 
-            if account == "":
-                raise ValueError("账号不能为空")
-            if password == "":
-                raise ValueError("密码不能为空")
+            if account and password:
+                # 通过 API 获取 token
+                from EasiAuto.core.automator.qrcode import fetch_password_token
 
-            existing = next(
-                (
-                    item
-                    for item in profile.list_automation()
-                    if isinstance(item, EasiAutomation) and item.account == account
-                ),
-                None,
-            )
-            if existing and existing.id != self.current_automation.id:
-                raise ValueError("账号已存在")
+                token_data = fetch_password_token(account, password)
+                if not token_data:
+                    raise ValueError("Token 获取失败，请检查账号密码是否正确")
 
-            self.current_automation.account = account
-            self.current_automation.password = password
-            self.current_automation.account_name = self.account_name_edit.text().strip() or None
+                existing = next(
+                    (
+                        item
+                        for item in profile.list_automation()
+                        if isinstance(item, LoginAutomation) and item.account == account
+                    ),
+                    None,
+                )
+                if existing and existing.id != self.current_automation.id:
+                    raise ValueError("账号已存在")
+
+                self.current_automation.account = account
+                self.current_automation.token = token_data["token"]
+                self.current_automation.user_id = token_data["userId"]
+                self.current_automation.nick_name = token_data["nickName"]
+                self.current_automation.phone = token_data["phone"]
+
+                # 获取并缓存头像
+                if token_data.get("photoUrl"):
+                    avatar_path = self._cache_qrcode_avatar(
+                        token_data["userId"], token_data["photoUrl"]
+                    )
+                    if avatar_path:
+                        self.current_automation.avatar = avatar_path
 
         profile.upsert_automation(self.current_automation)
         profile.save(reason="automation_saved")
@@ -723,7 +729,7 @@ class ProfileManagePage(QWidget):
         )
 
     def _on_item_clicked(self, item: QListWidgetItem):
-        automation: EasiAutomation = item.data(Qt.ItemDataRole.UserRole)
+        automation: LoginAutomation = item.data(Qt.ItemDataRole.UserRole)
         self.current_list_item = item
         self.is_new_automation = False
         self._update_editor(automation.model_copy(deep=True))
@@ -759,7 +765,7 @@ class ProfileManagePage(QWidget):
         profile.save(reason="automation_saved")
 
     def _handle_action_remove(self, item: QListWidgetItem):
-        automation: EasiAutomation = item.data(Qt.ItemDataRole.UserRole)
+        automation: LoginAutomation = item.data(Qt.ItemDataRole.UserRole)
         if profile.delete_automation(automation.id):
             profile.save(reason="automation_deleted")
             if self.current_list_item == item:
@@ -784,7 +790,7 @@ class ProfileManagePage(QWidget):
 
         for i in range(self.auto_list.count()):
             item = self.auto_list.item(i)
-            automation: EasiAutomation = item.data(Qt.ItemDataRole.UserRole)
+            automation: LoginAutomation = item.data(Qt.ItemDataRole.UserRole)
             if automation and automation.id == automation_id:
                 target_item = item
                 break
@@ -804,7 +810,7 @@ class ProfileManagePage(QWidget):
         subject_tags_map = self._build_subject_tags_map()
         for i in range(self.auto_list.count()):
             item = self.auto_list.item(i)
-            automation: EasiAutomation | None = item.data(Qt.ItemDataRole.UserRole)
+            automation: LoginAutomation | None = item.data(Qt.ItemDataRole.UserRole)
             item_widget = self.auto_list.itemWidget(item)
             if not isinstance(item_widget, ProfileCard) or automation is None:
                 continue

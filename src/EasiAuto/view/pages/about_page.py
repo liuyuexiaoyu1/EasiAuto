@@ -23,7 +23,6 @@ from qfluentwidgets import (
 )
 
 from EasiAuto import __version__
-from EasiAuto.consts import IS_FULL
 from EasiAuto.core.utils import get_resource
 
 
@@ -90,7 +89,7 @@ class AboutPage(QWidget):
         title_layout = QHBoxLayout()
         title_layout.setAlignment(Qt.AlignmentFlag.AlignBottom)
         title = TitleLabel("EasiAuto", self)
-        subtitle = SubtitleLabel(f"版本 v{__version__} ({'FULL' if IS_FULL else 'LITE'})", self)
+        subtitle = SubtitleLabel(f"版本 v{__version__}", self)
         title_layout.addWidget(title)
         title_layout.addSpacing(6)
         title_layout.addWidget(subtitle)
