@@ -96,6 +96,15 @@ class QRCodeAutomator(BaseAutomator):
                 time.sleep(0.5)
         logger.warning(f"DLL 等待解除占用超时: {file_path}")
 
+    @staticmethod
+    def _is_newtonsoft_patched(dll_path: Path) -> bool:
+        """检测 Newtonsoft.Json.dll 是否被注入了 SeewoPipeBridge 引用"""
+        try:
+            data = dll_path.read_bytes()
+            return b"SeewoPipeBridge" in data
+        except Exception:
+            return False
+
     def deploy_resources(self):
         dllpatcher_exe = VENDOR_PATH / "DllPatcher" / "DllPatcher.exe"
 
@@ -114,6 +123,15 @@ class QRCodeAutomator(BaseAutomator):
 
         for main_dir in target_dirs:
             logger.info(f"处理: {main_dir}")
+
+            # 检测 Newtonsoft.Json.dll 是否被篡改过（注入了 SeewoPipeBridge 引用）
+            newtonsoft_dll = main_dir / "Newtonsoft.Json.dll"
+            newtonsoft_bak = main_dir / "Newtonsoft.Json.dll.bak"
+            if newtonsoft_dll.exists() and newtonsoft_bak.exists():
+                if self._is_newtonsoft_patched(newtonsoft_dll):
+                    logger.warning("检测到 Newtonsoft.Json.dll 已被注入 SeewoPipeBridge，从备份恢复")
+                    shutil.copy2(newtonsoft_bak, newtonsoft_dll)
+
             for dll_name in deploy_dlls:
                 self._deploy_file(VENDOR_PATH / dll_name, main_dir / dll_name)
 
